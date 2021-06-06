@@ -5,8 +5,10 @@ lazy val root = project
   .settings(
     name := "scala3-simple",
     version := "0.1.0",
-
     scalaVersion := scala3Version,
-
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test"
+    libraryDependencies ++= Seq(
+      "com.novocode" % "junit-interface" % "0.11" % "test",
+      "org.typelevel" %% "cats-core" % "2.6.1",
+      "dev.zio" %% "zio" % "1.0.9"
+    )
   )
