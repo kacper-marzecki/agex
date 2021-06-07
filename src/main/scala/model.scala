@@ -7,6 +7,8 @@ enum Literal {
   case LUnit
 }
 
+case class TypedExpression(expression: Expression, _type: Type)
+
 enum Expression {
   case EVariable(name: String)
   case ELiteral(it: Literal)
@@ -42,11 +44,11 @@ enum LiteralType {
 }
 
 enum ContextElement(val name: String) {
-  case Variable(override val name: String) extends ContextElement(name)
-  case Existential(override val name: String) extends ContextElement(name)
-  case Solved(override val name: String, _type: Type)
+  case CVariable(override val name: String) extends ContextElement(name)
+  case CExistential(override val name: String) extends ContextElement(name)
+  case CSolved(override val name: String, _type: Type)
       extends ContextElement(name)
-  case TypedVariable(override val name: String, _type: Type)
+  case CTypedVariable(override val name: String, _type: Type)
       extends ContextElement(name)
-  case Marker(override val name: String) extends ContextElement(name)
+  case CMarker(override val name: String) extends ContextElement(name)
 }

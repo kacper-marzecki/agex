@@ -6,8 +6,10 @@ import zio.test.environment._
 import java.io.IOException
 import Type.*
 import LiteralType.*
-def solved(name: String, _type: Type): ContextElement.Solved =
-  ContextElement.Solved(name, _type)
+import ContextElement.*
+
+def solved(name: String, _type: Type): CSolved =
+  CSolved(name, _type)
 
 object ContextTest extends DefaultRunnableSpec {
   val solved1 = solved("solved1", TLiteral(LTChar))

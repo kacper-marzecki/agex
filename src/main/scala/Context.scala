@@ -2,6 +2,7 @@ import cats.implicits.*
 import zio.*
 import ZIO.{fail, succeed}
 import AppError.*
+import ContextElement.*
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def add(it: ContextElement) =
@@ -39,19 +40,19 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
 
   def getSolved(name: String): Option[Type] =
     elements.mapFilter {
-      case ContextElement.Solved(name1, _type) if name == name1 => Some(_type)
-      case _                                                    => None
+      case CSolved(name1, _type) if name == name1 => Some(_type)
+      case _                                      => None
     }.headOption
 
   def hasExistential(name: String): Boolean =
-    elements.contains(ContextElement.Existential(name))
+    elements.contains(CExistential(name))
 
   def hasVariable(name: String): Boolean =
-    elements.contains(ContextElement.Variable(name))
+    elements.contains(CVariable(name))
 
   def getAnnotation(name: String): Option[Type] =
     elements.mapFilter {
-      case ContextElement.TypedVariable(name1, _type) if name == name1 =>
+      case CTypedVariable(name1, _type) if name == name1 =>
         Some(_type)
       case _ => None
     }.headOption
