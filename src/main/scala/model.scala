@@ -7,15 +7,43 @@ enum Literal {
   case LUnit
 }
 
-case class TypedExpression(expression: Expression, _type: Type)
-
+enum TypedExpression {
+  case TEVariable(name: String, _type: Type)
+  case TELiteral(it: Literal, _type: Type)
+  case TEAbstraction(arg: String, body: TypedExpression, _type: Type)
+  case TEApplication(fun: TypedExpression, arg: TypedExpression, _type: Type)
+  case TELet(
+      name: String,
+      value: TypedExpression,
+      body: TypedExpression,
+      _type: Type
+  )
+  case TEAnnotation(expr: TypedExpression, annotatedType: Type, _type: Type)
+  case TETuple(one: TypedExpression, two: TypedExpression, _type: Type)
+}
 enum Expression {
+  import TypedExpression.*
+  def toTyped(_type: Type) =
+    this match {
+      case EVariable(name: String) => TEVariable(name, _type)
+      case ELiteral(it: Literal)   => TELiteral(it, _type)
+      case EAbstraction(arg: String, body: Expression) =>
+        TEAbstraction(arg, body.toTyped, _type)
+      case EApplication(fun: Expression, arg: Expression) =>
+        TEApplication(fun, arg, _type)
+      case ELet(name: String, value: Expression, body: Expression) =>
+        TELet(name, value, body, _type)
+      case EAnnotation(expr: Expression, annotatedType: Type) =>
+        TEAnnotation(expr, annotatedType, _type)
+      case ETuple(one: Expression, two: Expression) => TETuple(one, two, _type)
+    }
+
   case EVariable(name: String)
   case ELiteral(it: Literal)
   case EAbstraction(arg: String, body: Expression)
   case EApplication(fun: Expression, arg: Expression)
   case ELet(name: String, value: Expression, body: Expression)
-  case EAnnotation(expr: Expression, _type: Type)
+  case EAnnotation(expr: Expression, annotatedType: Type)
   case ETuple(one: Expression, two: Expression)
 }
 

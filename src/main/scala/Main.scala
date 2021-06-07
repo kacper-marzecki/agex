@@ -40,6 +40,7 @@ def literalSynthesizesTo(literal: Literal): LiteralType = {
 }
 
 /// Figure 11.
+// enrich by a type ?
 def checksAgainst(
     context: Context,
     expr: Expression,
