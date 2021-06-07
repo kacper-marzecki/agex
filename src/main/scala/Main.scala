@@ -49,12 +49,12 @@ def checksAgainst(
       val typedVar = ContextElement.TypedVariable(arg, argType)
       val gamma = context.add(typedVar)
       checksAgainst(gamma, body, bodyType)
-        .map(_.drop(typedVar))
+        .flatMap(_.drop(typedVar))
     }
     case (expression, Type.Quantification(name, quantType)) => {
       val variable = ContextElement.Variable(name)
       val gamma = context.add(variable)
-      checksAgainst(gamma, expression, quantType).map(_.drop(variable))
+      checksAgainst(gamma, expression, quantType).flatMap(_.drop(variable))
     }
     //xI
     case (Expression.ETuple(one, two), Type.Product(oneType, twoType)) => {
@@ -73,8 +73,6 @@ def checksAgainst(
           )
         }
     }
-    // TODO meaningful error message
-    case _ => ???
   }
 }
 

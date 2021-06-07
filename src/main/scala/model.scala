@@ -44,10 +44,12 @@ enum LiteralType {
   case LTBool
 }
 
-enum ContextElement {
-  case Variable(name: String)
-  case Existential(name: String)
-  case Solved(name: String, _type: Type)
-  case Marker(name: String)
-  case TypedVariable(name: String, _type: Type)
+enum ContextElement(val name: String) {
+  case Variable(override val name: String) extends ContextElement(name)
+  case Existential(override val name: String) extends ContextElement(name)
+  case Solved(override val name: String, _type: Type)
+      extends ContextElement(name)
+  case TypedVariable(override val name: String, _type: Type)
+      extends ContextElement(name)
+  case Marker(override val name: String) extends ContextElement(name)
 }

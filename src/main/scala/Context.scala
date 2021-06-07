@@ -1,34 +1,39 @@
 import cats.implicits.*
+import zio.*
+import ZIO.{fail, succeed}
+import AppError.*
+
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def add(it: ContextElement) =
     this.copy(elements = elements.appended(it))
 
   // TODO throws
-  def splitAt(it: ContextElement): (Context, Context) = {
+  def splitAt(it: ContextElement): IO[ElementNotFound, (Context, Context)] = {
     elements.findIndexOf(it) match {
-      case None => ???
+      case None => fail(ElementNotFound(this, it))
       case Some(index) =>
         val (l, r) = elements.splitAt(index)
-        (Context(l), Context(r))
+        succeed((Context(l), Context(r)))
     }
   }
 
   def insertInPlace(
       element: ContextElement,
       inserts: List[ContextElement]
-  ): Context = {
-    val newElements = elements.findIndexOf(element) match {
-      case None        => ???
-      case Some(index) => elements.patch(index, inserts, 1)
-    }
-    Context(newElements)
-  }
+  ): IO[ElementNotFound, Context] =
+    for {
+      newElements <- elements.findIndexOf(element) match {
+        case None => fail[ElementNotFound](ElementNotFound(this, element))
+        case Some(index) => succeed(elements.patch(index, inserts, 1))
+      }
+    } yield Context(newElements)
 
-  def drop(element: ContextElement): Context = {
+  def drop(
+      element: ContextElement
+  ): IO[ElementNotFound, Context] = {
     elements.findIndexOf(element) match {
-      case None => ???
-      // TODO possible bug: check how splitAt splits the coll
-      case Some(index) => Context(elements.splitAt(index)._1)
+      case None        => ZIO.fail(ElementNotFound(this, element))
+      case Some(index) => ZIO.succeed(Context(elements.splitAt(index)._1))
     }
   }
 

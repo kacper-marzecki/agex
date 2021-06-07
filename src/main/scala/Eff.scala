@@ -15,9 +15,10 @@ object MutableState {
     }
 }
 
-enum AppError {
+enum AppError extends RuntimeException {
   case Unexpected(throwable: Throwable)
   case TypeNotApplicableToLiteral(_type: LiteralType, literal: Literal)
+  case ElementNotFound(context: Context, element: ContextElement)
 }
 
 type Env = ZEnv with Has[MutableState]
