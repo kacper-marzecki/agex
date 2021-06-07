@@ -20,16 +20,16 @@ enum Expression {
 enum Type {
   def isMonotype: Boolean =
     this match {
-      case _: Type.Quantification  => false
-      case Type.Function(arg, ret) => arg.isMonotype && ret.isMonotype
-      case _                       => true
+      case _: Type.TQuantification  => false
+      case Type.TFunction(arg, ret) => arg.isMonotype && ret.isMonotype
+      case _                        => true
     }
-  case Literal(literalType: LiteralType)
-  case Variable(name: String)
-  case Existential(name: String)
-  case Quantification(name: String, _type: Type)
-  case Function(arg: Type, ret: Type)
-  case Product(one: Type, two: Type)
+  case TLiteral(literalType: LiteralType)
+  case TVariable(name: String)
+  case TExistential(name: String)
+  case TQuantification(name: String, _type: Type)
+  case TFunction(arg: Type, ret: Type)
+  case TProduct(one: Type, two: Type)
 }
 
 enum LiteralType {

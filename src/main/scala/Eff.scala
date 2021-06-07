@@ -19,7 +19,28 @@ object MutableState {
 }
 
 enum AppError extends RuntimeException {
-  case Unexpected(throwable: Throwable)
+  def show =
+    this match {
+      case TypeNotApplicableToLiteral(_type: LiteralType, literal: Literal) =>
+        s"TypeNotApplicableToLiteral: ${_type}, $literal"
+      case ElementNotFound(context: Context, element: ContextElement) =>
+        s"ElementNotFound: $context, $element"
+      case AnnotationNotFound(context: Context, name: String) =>
+        s"AnnotationNotFound: $context, $name"
+      case TypeNotWellFormed(context: Context, _type: Type) =>
+        s"TypeNotWellFormed: $context ${_type}"
+      case CannotApplyType(_type: Type) => s"CannotApplyType: ${_type}"
+      case TypesNotEqual(_typeA: Type, _typeB: Type) =>
+        s"TypesNotEqual: ${_typeA} ${_typeB}"
+      case TypeNamesNotEqual(alpha1: String, alpha2: String) =>
+        s"TypeNamesNotEqual: $alpha1 $alpha2"
+      case CircularInstantiation(context: Context, name: String, _type: Type) =>
+        s"CircularInstantiation: $context $name ${_type}"
+      case CannotInstantiateR(context: Context, name: String, _type: Type) =>
+        s"CannotInstantiateR:  $context $name ${_type}"
+      case CannotInstantiateL(context: Context, name: String, _type: Type) =>
+        s"CannotInstantiateL:  $context $name ${_type}"
+    }
   case TypeNotApplicableToLiteral(_type: LiteralType, literal: Literal)
   case ElementNotFound(context: Context, element: ContextElement)
   case AnnotationNotFound(context: Context, name: String)
@@ -28,7 +49,8 @@ enum AppError extends RuntimeException {
   case TypesNotEqual(_typeA: Type, _typeB: Type)
   case TypeNamesNotEqual(alpha1: String, alpha2: String)
   case CircularInstantiation(context: Context, name: String, _type: Type)
-  case CannotInstantiate(context: Context, name: String, _type: Type)
+  case CannotInstantiateR(context: Context, name: String, _type: Type)
+  case CannotInstantiateL(context: Context, name: String, _type: Type)
 }
 
 type Env = ZEnv with Has[MutableState]

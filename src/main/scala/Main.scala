@@ -4,6 +4,7 @@ import zio.console.{putStrLn, putStrLnErr}
 import cats.syntax.apply
 import ZIO.{succeed, fail}
 import AppError.*
+import cats.syntax.contravariantSemigroupal
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -40,26 +41,26 @@ def checksAgainst(
 ): Eff[Context] = {
   (expr, _type) match {
     //1I
-    case (Expression.ELiteral(literal), Type.Literal(_type)) => {
+    case (Expression.ELiteral(literal), Type.TLiteral(_type)) => {
       assertLiteralChecksAgainst(literal, _type).as(context)
     }
     //->I
     case (
           Expression.EAbstraction(arg, body),
-          Type.Function(argType, bodyType)
+          Type.TFunction(argType, bodyType)
         ) => {
       val typedVar = ContextElement.TypedVariable(arg, argType)
       val gamma = context.add(typedVar)
       checksAgainst(gamma, body, bodyType)
         .flatMap(_.drop(typedVar))
     }
-    case (expression, Type.Quantification(name, quantType)) => {
+    case (expression, Type.TQuantification(name, quantType)) => {
       val variable = ContextElement.Variable(name)
       val gamma = context.add(variable)
       checksAgainst(gamma, expression, quantType).flatMap(_.drop(variable))
     }
     //xI
-    case (Expression.ETuple(one, two), Type.Product(oneType, twoType)) => {
+    case (Expression.ETuple(one, two), Type.TProduct(oneType, twoType)) => {
       checksAgainst(context, one, oneType).flatMap(
         checksAgainst(_, two, twoType)
       )
@@ -82,7 +83,7 @@ def synthesizesTo(context: Context, expr: Expression): Eff[(Type, Context)] =
   expr match {
     //1I=>
     case Expression.ELiteral(literal) =>
-      succeed((Type.Literal(literalSynthesizesTo(literal)), context))
+      succeed((Type.TLiteral(literalSynthesizesTo(literal)), context))
     //Var
     case Expression.EVariable(name) => {
       context
@@ -108,13 +109,13 @@ def synthesizesTo(context: Context, expr: Expression): Eff[(Type, Context)] =
         gamma = context
           .add(ContextElement.Existential(alpha))
           .add(ContextElement.Existential(beta))
-          .add(ContextElement.TypedVariable(arg, Type.Existential(alpha)))
-        delta <- checksAgainst(gamma, ret, Type.Existential(beta))
+          .add(ContextElement.TypedVariable(arg, Type.TExistential(alpha)))
+        delta <- checksAgainst(gamma, ret, Type.TExistential(beta))
           .flatMap(
-            _.drop(ContextElement.TypedVariable(arg, Type.Existential(alpha)))
+            _.drop(ContextElement.TypedVariable(arg, Type.TExistential(alpha)))
           )
       } yield (
-        Type.Function(Type.Existential(alpha), Type.Existential(beta)),
+        Type.TFunction(Type.TExistential(alpha), Type.TExistential(beta)),
         delta
       )
     }
@@ -124,7 +125,7 @@ def synthesizesTo(context: Context, expr: Expression): Eff[(Type, Context)] =
         (oneType, gamma) = oneResult
         twoResult <- synthesizesTo(gamma, two)
         (twoType, delta) = twoResult
-      } yield (Type.Product(oneType, twoType), delta)
+      } yield (Type.TProduct(oneType, twoType), delta)
     }
     case Expression.ELet(name, expr, body) => {
       for {
@@ -140,11 +141,11 @@ def synthesizesTo(context: Context, expr: Expression): Eff[(Type, Context)] =
     //->E
     case Expression.EApplication(fun, arg) => {
       for {
-        argResult <- synthesizesTo(context, arg)
-        (argType, theta) = argResult
+        funResult <- synthesizesTo(context, fun)
+        (funType, theta) = funResult
         appResult <- applicationSynthesizesTo(
           theta,
-          applyContext(argType, theta),
+          applyContext(funType, theta),
           arg
         )
       } yield appResult
@@ -159,7 +160,7 @@ def applicationSynthesizesTo(
 ): Eff[(Type, Context)] =
   _type match {
     //alphaApp
-    case Type.Existential(name) => {
+    case Type.TExistential(name) => {
       for {
         alpha1 <- MutableState.makeExistential
         alpha2 <- MutableState.makeExistential
@@ -170,35 +171,70 @@ def applicationSynthesizesTo(
             ContextElement.Existential(alpha1),
             ContextElement.Solved(
               name,
-              Type.Function(Type.Existential(alpha1), Type.Existential(alpha2))
+              Type.TFunction(
+                Type.TExistential(alpha1),
+                Type.TExistential(alpha2)
+              )
             )
           )
         )
-        delta <- checksAgainst(gamma, expr, Type.Existential(alpha1))
-      } yield (Type.Existential(alpha2), delta)
+        delta <- checksAgainst(gamma, expr, Type.TExistential(alpha1))
+      } yield (Type.TExistential(alpha2), delta)
     }
     //ForallApp
-    case Type.Quantification(name, quantType) => {
+    case Type.TQuantification(name, quantType) => {
       for {
         alpha <- MutableState.makeExistential
         gamma = context.add(ContextElement.Existential(alpha))
         substitutedType = substitution(
           quantType,
           name,
-          Type.Existential(alpha)
+          Type.TExistential(alpha)
         )
         result <- applicationSynthesizesTo(gamma, substitutedType, expr)
       } yield result
     }
     //App
-    case Type.Function(arg, ret) =>
+    case Type.TFunction(arg, ret) =>
       for {
         delta <- checksAgainst(context, expr, arg)
       } yield (ret, delta)
     case _ => fail(CannotApplyType(_type))
   }
 
-def substitution(a: Type, alpha: String, b: Type): Type = ???
+/// Substitution is written in the paper as [α^/α]A which means, α is replaced with α^ in all occurrences in A
+def substitution(a: Type, alpha: String, b: Type): Type = {
+  a match {
+    case _: Type.TLiteral     => a
+    case Type.TVariable(name) => if (name == alpha) b else a
+    case Type.TQuantification(name, quantType) => {
+      if (name == alpha) {
+        Type.TQuantification(name, b)
+      } else {
+        Type.TQuantification(name, substitution(quantType, alpha, b))
+      }
+    }
+    case Type.TExistential(name) => if (name == alpha) b else a
+    case Type.TProduct(one, two) =>
+      Type.TProduct(
+        substitution(one, alpha, b),
+        substitution(two, alpha, b)
+      )
+    case Type.TFunction(arg, ret) =>
+      Type.TFunction(
+        substitution(arg, alpha, b),
+        substitution(ret, alpha, b)
+      )
+  }
+}
+
+def synth(expr: Expression): Eff[Type] = {
+  for {
+    synthResult <- synthesizesTo(Context(), expr)
+    (resultType, context) = synthResult
+    result = applyContext(resultType, context)
+  } yield result
+}
 
 def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
   if (cond) {
@@ -210,15 +246,15 @@ def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
 /// Figure 7
 def isWellFormed(context: Context, _type: Type): Boolean = {
   _type match {
-    case _: Type.Literal     => true
-    case Type.Variable(name) => context.hasVariable(name)
-    case Type.Function(arg, ret) =>
+    case _: Type.TLiteral     => true
+    case Type.TVariable(name) => context.hasVariable(name)
+    case Type.TFunction(arg, ret) =>
       isWellFormed(context, arg) && isWellFormed(context, ret)
-    case Type.Quantification(alpha, a) =>
+    case Type.TQuantification(alpha, a) =>
       isWellFormed(context.add(ContextElement.Variable(alpha)), a)
-    case Type.Existential(name) =>
+    case Type.TExistential(name) =>
       context.hasExistential(name) || context.getSolved(name).isDefined
-    case Type.Product(one, two) =>
+    case Type.TProduct(one, two) =>
       isWellFormed(context, one) && isWellFormed(context, two)
   }
 }
@@ -230,18 +266,19 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
 /// https://github.com/ollef/Bidirectional and https://github.com/atennapel/bidirectional.js
 def occursIn(alpha: String, a: Type): Boolean = {
   a match {
-    case Type.Literal(_)         => false
-    case Type.Variable(name)     => alpha == name
-    case Type.Function(arg, ret) => occursIn(alpha, arg) || occursIn(alpha, ret)
-    case Type.Quantification(beta, t) => {
+    case Type.TLiteral(_)     => false
+    case Type.TVariable(name) => alpha == name
+    case Type.TFunction(arg, ret) =>
+      occursIn(alpha, arg) || occursIn(alpha, ret)
+    case Type.TQuantification(beta, t) => {
       if (alpha == beta) {
         return true;
       } else {
         return occursIn(alpha, t);
       }
     }
-    case Type.Existential(name) => alpha == name
-    case Type.Product(one, two) => occursIn(alpha, one) || occursIn(alpha, two)
+    case Type.TExistential(name) => alpha == name
+    case Type.TProduct(one, two) => occursIn(alpha, one) || occursIn(alpha, two)
   }
 }
 
@@ -251,25 +288,25 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
     _ <- assertTrue(isWellFormed(context, b), TypeNotWellFormed(context, b))
     delta <- (a, b) match {
       //<:Unit
-      case (Type.Literal(literalA), Type.Literal(literalB)) => {
+      case (Type.TLiteral(literalA), Type.TLiteral(literalB)) => {
         assertTrue(literalA == literalB, TypesNotEqual(a, b))
           .as(context)
       }
       //<:Var
-      case (Type.Variable(nameA), Type.Variable(nameB)) => {
+      case (Type.TVariable(nameA), Type.TVariable(nameB)) => {
         assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a)) *>
           assertTrue(nameA == nameB, TypeNamesNotEqual(nameA, nameB))
             .as(context)
       }
       //<:Exvar
-      case (Type.Existential(name1), Type.Existential(name2))
+      case (Type.TExistential(name1), Type.TExistential(name2))
           if name1 == name2 => {
         assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a)).as(
           context
         )
       }
       //<:->
-      case (Type.Function(arg1, ret1), Type.Function(arg2, ret2)) => {
+      case (Type.TFunction(arg1, ret1), Type.TFunction(arg2, ret2)) => {
         for {
           theta <- subtype(context, arg1, arg2)
           delta <- subtype(
@@ -279,11 +316,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           )
         } yield delta
       }
-      case (Type.Product(one1, two1), Type.Product(one2, two2)) => {
+      case (Type.TProduct(one1, two1), Type.TProduct(one2, two2)) => {
         subtype(context, one1, one2).flatMap(subtype(_, two1, two2))
       }
       //<:forallL
-      case (Type.Quantification(name, quantType), _) => {
+      case (Type.TQuantification(name, quantType), _) => {
         for {
           alpha <- MutableState.makeExistential
           gamma = context
@@ -292,20 +329,20 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           substitutedQuantType = substitution(
             quantType,
             name,
-            Type.Existential(alpha)
+            Type.TExistential(alpha)
           )
           delta <- subtype(gamma, substitutedQuantType, b)
           result <- delta.drop(ContextElement.Marker(alpha))
         } yield result
       }
       //<:forallR
-      case (_, Type.Quantification(name, quantType)) => {
+      case (_, Type.TQuantification(name, quantType)) => {
         val theta = context.add(ContextElement.Variable(name))
         subtype(theta, a, quantType)
           .flatMap(_.drop(ContextElement.Variable(name)))
       }
       //<:InstatiateL
-      case (Type.Existential(name), _) => {
+      case (Type.TExistential(name), _) => {
         if (!occursIn(name, b)) {
           instantiateL(context, name, b)
         } else {
@@ -313,7 +350,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         }
       }
       //<:InstantiateR
-      case (_, Type.Existential(name)) => {
+      case (_, Type.TExistential(name)) => {
         if (!occursIn(name, a)) {
           instantiateR(context, a, name)
         } else {
@@ -331,16 +368,14 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
     //InstLSolve
     result <-
       if (b.isMonotype && isWellFormed(left, b)) {
-        succeed(
-          context.insertInPlace(
-            ContextElement.Existential(alpha),
-            List(ContextElement.Solved(alpha, b))
-          )
+        context.insertInPlace(
+          ContextElement.Existential(alpha),
+          List(ContextElement.Solved(alpha, b))
         )
       } else {
         b match {
           //InstLArr
-          case Type.Function(arg, ret) => {
+          case Type.TFunction(arg, ret) => {
             for {
               alpha1 <- MutableState.makeExistential
               alpha2 <- MutableState.makeExistential
@@ -351,19 +386,19 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
                   ContextElement.Existential(alpha1),
                   ContextElement.Solved(
                     alpha,
-                    Type.Function(
-                      Type.Existential(alpha1),
-                      Type.Existential(alpha2)
+                    Type.TFunction(
+                      Type.TExistential(alpha1),
+                      Type.TExistential(alpha2)
                     )
                   )
                 )
               )
               theta <- instantiateR(gamma, arg, alpha1)
               delta <- instantiateL(theta, alpha2, applyContext(ret, theta))
-            } yield ???
+            } yield delta
           }
           //InstAIIR
-          case Type.Quantification(beta, b) => {
+          case Type.TQuantification(beta, b) => {
             for {
               gamma <- instantiateL(
                 context.add(ContextElement.Variable(beta)),
@@ -374,40 +409,122 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
             } yield delta
           }
           //InstLReach
-          case Type.Existential(beta) => {
+          case Type.TExistential(beta) => {
             context.insertInPlace(
               ContextElement.Existential(beta),
-              List(ContextElement.Solved(beta, Type.Existential(alpha)))
+              List(ContextElement.Solved(beta, Type.TExistential(alpha)))
             )
           }
-          case _ => fail(CannotInstantiate(context, alpha, b))
+          case _ => fail(CannotInstantiateL(context, alpha, b))
         }
       }
-  } yield ???
+  } yield result
 }
 
 /// Figure 10
 def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
-  ???
+  for {
+    split <- context.splitAt(ContextElement.Existential(alpha))
+    (left, right) = split
+    result <-
+      if (a.isMonotype && isWellFormed(left, a)) {
+        //InstRSolve
+        context.insertInPlace(
+          ContextElement.Existential(alpha),
+          List(ContextElement.Solved(alpha, a))
+        )
+      } else {
+        a match {
+          //InstRArr
+          case Type.TFunction(arg, ret) => {
+            for {
+              alpha1 <- MutableState.makeExistential
+              alpha2 <- MutableState.makeExistential
+              gamma <- context.insertInPlace(
+                ContextElement.Existential(alpha),
+                List(
+                  ContextElement.Existential(alpha2),
+                  ContextElement.Existential(alpha1),
+                  ContextElement.Solved(
+                    alpha,
+                    Type.TFunction(
+                      Type.TExistential(alpha1),
+                      Type.TExistential(alpha2)
+                    )
+                  )
+                )
+              )
+              theta <- instantiateL(gamma, alpha1, arg)
+              delta <- instantiateR(theta, applyContext(ret, theta), alpha2)
+            } yield delta
+          }
+          //InstRAllL
+          case Type.TQuantification(beta, b) => {
+            for {
+              beta1 <- MutableState.makeExistential
+              gamma = context
+                .add(ContextElement.Marker(beta1))
+                .add(ContextElement.Existential(beta1))
+              theta <- instantiateR(
+                gamma,
+                substitution(b, beta, Type.TExistential(beta1)),
+                alpha
+              )
+              delta <- theta.drop(ContextElement.Marker(beta1))
+            } yield delta
+          }
+          case Type.TProduct(one, two) => {
+            for {
+              alpha1 <- MutableState.makeExistential
+              beta1 <- MutableState.makeExistential
+              gamma <- context.insertInPlace(
+                ContextElement.Existential(alpha),
+                List(
+                  ContextElement.Existential(beta1),
+                  ContextElement.Existential(alpha1),
+                  ContextElement.Solved(
+                    alpha,
+                    Type.TProduct(
+                      Type.TExistential(alpha1),
+                      Type.TExistential(beta1)
+                    )
+                  )
+                )
+              )
+              theta <- instantiateL(gamma, alpha1, one)
+              delta <- instantiateR(theta, applyContext(two, theta), beta1)
+            } yield delta
+          }
+          //InstRReach
+          case Type.TExistential(beta) => {
+            context.insertInPlace(
+              ContextElement.Existential(beta),
+              List(ContextElement.Solved(beta, Type.TExistential(alpha)))
+            )
+          }
+          case _ => fail(CannotInstantiateR(context, alpha, a))
+        }
+      }
+  } yield result
 
 /// Figure 8
 def applyContext(_type: Type, context: Context): Type = {
   _type match {
-    case Type.Literal(_)  => _type
-    case Type.Variable(_) => _type
-    case Type.Existential(name) => {
+    case Type.TLiteral(_)  => _type
+    case Type.TVariable(_) => _type
+    case Type.TExistential(name) => {
       context.getSolved(name).fold(_type)(applyContext(_, context))
     }
-    case Type.Function(argType, returnType) =>
-      Type.Function(
+    case Type.TFunction(argType, returnType) =>
+      Type.TFunction(
         applyContext(argType, context),
         applyContext(returnType, context)
       )
-    case Type.Quantification(name, quantType) => {
-      Type.Quantification(name, applyContext(quantType, context))
+    case Type.TQuantification(name, quantType) => {
+      Type.TQuantification(name, applyContext(quantType, context))
     }
-    case Type.Product(oneType, twoType) =>
-      Type.Product(
+    case Type.TProduct(oneType, twoType) =>
+      Type.TProduct(
         applyContext(oneType, context),
         applyContext(twoType, context)
       )
@@ -425,8 +542,8 @@ object App extends zio.App {
 @main def hello: Unit = {
   val c = Context(elements =
     Vector(
-      ContextElement.Solved("name1", Type.Literal(LiteralType.LTChar)),
-      ContextElement.Solved("name3", Type.Literal(LiteralType.LTBool))
+      ContextElement.Solved("name1", Type.TLiteral(LiteralType.LTChar)),
+      ContextElement.Solved("name3", Type.TLiteral(LiteralType.LTBool))
     )
   )
   println(c.getSolved("name3"))

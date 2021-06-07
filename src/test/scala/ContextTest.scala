@@ -1,26 +1,20 @@
-import org.junit.Test
-import org.junit.Assert.*
-
-class Test1:
-  @Test def t1(): Unit =
-    assertEquals("I was compiled by Scala 3. :)", msg)
-
 import zio._
 import zio.console._
 import zio.test._
 import zio.test.Assertion._
 import zio.test.environment._
 import java.io.IOException
-
+import Type.*
+import LiteralType.*
 def solved(name: String, _type: Type): ContextElement.Solved =
   ContextElement.Solved(name, _type)
 
 object ContextTest extends DefaultRunnableSpec {
-  val solved1 = solved("solved1", Type.Literal(LiteralType.LTChar))
-  val solved2 = solved("solved2", Type.Literal(LiteralType.LTBool))
-  val solved3 = solved("solved3", Type.Literal(LiteralType.LTFloat))
-  val solved4 = solved("solved4", Type.Literal(LiteralType.LTInt))
-  val solved5 = solved("solved5", Type.Literal(LiteralType.LTString))
+  val solved1 = solved("solved1", TLiteral(LTChar))
+  val solved2 = solved("solved2", TLiteral(LTBool))
+  val solved3 = solved("solved3", TLiteral(LTFloat))
+  val solved4 = solved("solved4", TLiteral(LTInt))
+  val solved5 = solved("solved5", TLiteral(LTString))
   val context = Context(Vector(solved1, solved2, solved3))
 
   def spec = suite("ContextSpec")(
