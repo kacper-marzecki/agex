@@ -10,6 +10,7 @@ import Literal.*
 import LiteralType.*
 import Expression.*
 import ContextElement.*
+import TypedExpression.*
 import MutableState.makeExistential
 
 def assertLiteralChecksAgainst(
@@ -45,11 +46,13 @@ def checksAgainst(
     context: Context,
     expr: Expression,
     _type: Type
-): Eff[Context] = {
+): Eff[(TypedExpression, Context)] = {
   (expr, _type) match {
     //1I
     case (ELiteral(literal), TLiteral(_type)) => {
-      assertLiteralChecksAgainst(literal, _type).as(context)
+      assertLiteralChecksAgainst(literal, _type).as(
+        (TELiteral(literal, TLiteral(_type)), context)
+      )
     }
     //->I
     case (
@@ -58,30 +61,48 @@ def checksAgainst(
         ) => {
       val typedVar = CTypedVariable(arg, argType)
       val gamma = context.add(typedVar)
-      checksAgainst(gamma, body, bodyType)
-        .flatMap(_.drop(typedVar))
+      for {
+        (typedBody, theta) <- checksAgainst(gamma, body, bodyType)
+        delta <- theta.drop(typedVar)
+      } yield (TEAbstraction(arg, typedBody, _type), delta)
     }
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
       val gamma = context.add(variable)
-      checksAgainst(gamma, expression, quantType).flatMap(_.drop(variable))
+      for {
+        (typed, theta) <- checksAgainst(gamma, expression, quantType)
+        delta <- theta.drop(variable)
+      } yield (typed, delta)
+      // checksAgainst(gamma, expression, quantType).flatMap(_.drop(variable))
     }
     //xI
     case (ETuple(one, two), TProduct(oneType, twoType)) => {
-      checksAgainst(context, one, oneType).flatMap(
-        checksAgainst(_, two, twoType)
-      )
+      for {
+        (typedOne, gamma) <- checksAgainst(context, one, oneType)
+        (typedTwo, theta) <- checksAgainst(gamma, two, twoType)
+      } yield (TETuple(typedOne, typedTwo, _type), theta)
+      // checksAgainst(context, one, oneType).flatMap(
+      //   checksAgainst(_, two, twoType)
+      // )
     }
     //Sub
     case _ => {
-      synthesizesTo(context, expr)
-        .flatMap { case (a, theta) =>
-          subtype(
-            theta,
-            applyContext(a._type, theta),
-            applyContext(_type, theta)
-          )
-        }
+      for {
+        (typed, theta) <- synthesizesTo(context, expr)
+        result <- subtype(
+          theta,
+          applyContext(typed._type, theta),
+          applyContext(_type, theta)
+        )
+      } yield (typed, result)
+      // synthesizesTo(context, expr)
+      //   .flatMap { case (a, theta) =>
+      //     subtype(
+      //       theta,
+      //       applyContext(a._type, theta),
+      //       applyContext(_type, theta)
+      //     )
+      //   }
     }
   }
 }
@@ -92,7 +113,6 @@ def applicationSynthesizesTo(
     _type: Type,
     expr: Expression
 ): Eff[(TypedExpression, Context)] = {
-  val typed = TypedExpression(expr, _)
   _type match {
     //alphaApp
     case TExistential(name) => {
@@ -462,11 +482,11 @@ def synthesizesTo(
     context: Context,
     expr: Expression
 ): Eff[(TypedExpression, Context)] = {
-  val typed = TypedExpression(expr, _)
+  // TODO continue conversion to TypedExpression
   expr match {
     //1I=>
     case ELiteral(literal) =>
-      succeed((typed(TLiteral(literalSynthesizesTo(literal))), context))
+      succeed((TELiteral(literal, literalSynthesizesTo(literal)), context))
     //Var
     case EVariable(name) => {
       context

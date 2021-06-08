@@ -13,5 +13,6 @@ lazy val root = project
       "dev.zio" %% "zio-test" % "1.0.9" % "test",
       "dev.zio" %% "zio-test-sbt" % "1.0.9" % "test"
     ),
-    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
+    scalacOptions ++= Seq("-source:future")
   )
