@@ -7,9 +7,6 @@ import Expression.*
 import Type.*
 import LiteralType.*
 import Literal.*
-import javax.swing.plaf.metal.MetalIconFactory.TreeLeafIcon
-import javax.swing.plaf.metal.MetalBorders.ToolBarBorder
-import java.security.spec.EdDSAParameterSpec
 
 object SynthTest extends DefaultRunnableSpec {
   val litString = ELiteral(LString("string"))
@@ -109,6 +106,41 @@ object SynthTest extends DefaultRunnableSpec {
       val expr = EApplication(
         EApplication(plusFunction, ELiteral(LInt(1))),
         ELiteral(LInt(1))
+      )
+      assertM(runSynth(expr))(
+        equalTo(TLiteral(LTInt))
+      )
+    },
+    testM("partial application") {
+      // let plus = fun(a, b) -> a + b
+      // let plus1 = plus(1)
+      // let apply = fun(function, arg) -> function(arg)
+      // apply(plus1, 1)
+      val plusFunction = EAnnotation(
+        EAbstraction("a", EAbstraction("b", ELiteral(LInt(1)))),
+        TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
+      )
+      val expr = ELet(
+        "plus",
+        plusFunction,
+        ELet(
+          "plus1",
+          EApplication(EVariable("plus"), ELiteral(LInt(1))),
+          ELet(
+            "apply",
+            EAbstraction(
+              "function",
+              EAbstraction(
+                "arg",
+                EApplication(EVariable("function"), EVariable("arg"))
+              )
+            ),
+            EApplication(
+              EApplication(EVariable("apply"), EVariable("plus1")),
+              ELiteral(LInt(1))
+            )
+          )
+        )
       )
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTInt))
