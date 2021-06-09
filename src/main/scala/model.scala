@@ -12,7 +12,7 @@ enum TypedExpression(val _type: Type) {
       extends TypedExpression(_type)
   case TELiteral(it: Literal, override val _type: Type)
       extends TypedExpression(_type)
-  case TEAbstraction(
+  case TELambda(
       arg: String,
       body: TypedExpression,
       override val _type: Type
@@ -43,7 +43,7 @@ enum TypedExpression(val _type: Type) {
 enum Expression {
   case EVariable(name: String)
   case ELiteral(it: Literal)
-  case EAbstraction(arg: String, body: Expression)
+  case ELambda(arg: String, body: Expression)
   case EApplication(fun: Expression, arg: Expression)
   case ELet(name: String, value: Expression, body: Expression)
   case EAnnotation(expr: Expression, annotatedType: Type)

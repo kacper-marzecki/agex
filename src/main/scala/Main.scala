@@ -11,7 +11,7 @@ import LiteralType.*
 import Expression.*
 import ContextElement.*
 import TypedExpression.*
-import MutableState.makeExistential
+import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
 
 def assertLiteralChecksAgainst(
@@ -55,7 +55,7 @@ def checksAgainst(
     }
     //->I
     case (
-          EAbstraction(arg, body),
+          ELambda(arg, body),
           TFunction(argType, bodyType)
         ) => {
       val typedVar = CTypedVariable(arg, argType)
@@ -63,7 +63,7 @@ def checksAgainst(
       for {
         (typedBody, theta) <- checksAgainst(gamma, body, bodyType)
         delta <- theta.drop(typedVar)
-      } yield (TEAbstraction(arg, typedBody, _type), delta)
+      } yield (TELambda(arg, typedBody, _type), delta)
     }
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
@@ -105,8 +105,8 @@ def applicationSynthesizesTo(
     //alphaApp
     case TExistential(name) => {
       for {
-        alpha1 <- MutableState.makeExistential
-        alpha2 <- MutableState.makeExistential
+        alpha1 <- CompilerState.makeExistential
+        alpha2 <- CompilerState.makeExistential
         gamma <- context.insertInPlace(
           CExistential(name),
           List(
@@ -127,7 +127,7 @@ def applicationSynthesizesTo(
     //ForallApp
     case TQuantification(name, quantType) => {
       for {
-        alpha <- MutableState.makeExistential
+        alpha <- CompilerState.makeExistential
         gamma = context.add(CExistential(alpha))
         substitutedType = substitution(
           quantType,
@@ -253,7 +253,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       //<:forallL
       case (TQuantification(name, quantType), _) => {
         for {
-          alpha <- MutableState.makeExistential
+          alpha <- CompilerState.makeExistential
           gamma = context
             .add(CMarker(alpha))
             .add(CExistential(alpha))
@@ -309,8 +309,8 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
           //InstLArr
           case TFunction(arg, ret) => {
             for {
-              alpha1 <- MutableState.makeExistential
-              alpha2 <- MutableState.makeExistential
+              alpha1 <- CompilerState.makeExistential
+              alpha2 <- CompilerState.makeExistential
               gamma <- context.insertInPlace(
                 CExistential(alpha),
                 List(
@@ -370,8 +370,8 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
           //InstRArr
           case TFunction(arg, ret) => {
             for {
-              alpha1 <- MutableState.makeExistential
-              alpha2 <- MutableState.makeExistential
+              alpha1 <- CompilerState.makeExistential
+              alpha2 <- CompilerState.makeExistential
               gamma <- context.insertInPlace(
                 CExistential(alpha),
                 List(
@@ -393,7 +393,7 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
           //InstRAllL
           case TQuantification(beta, b) => {
             for {
-              beta1 <- MutableState.makeExistential
+              beta1 <- CompilerState.makeExistential
               gamma = context
                 .add(CMarker(beta1))
                 .add(CExistential(beta1))
@@ -407,8 +407,8 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
           }
           case TProduct(one, two) => {
             for {
-              alpha1 <- MutableState.makeExistential
-              beta1 <- MutableState.makeExistential
+              alpha1 <- CompilerState.makeExistential
+              beta1 <- CompilerState.makeExistential
               gamma <- context.insertInPlace(
                 CExistential(alpha),
                 List(
@@ -496,10 +496,10 @@ def synthesizesTo(
       }
     }
     //->I=>
-    case EAbstraction(arg, ret) => {
+    case ELambda(arg, ret) => {
       for {
-        alpha <- MutableState.makeExistential
-        beta <- MutableState.makeExistential
+        alpha <- CompilerState.makeExistential
+        beta <- CompilerState.makeExistential
         gamma = context
           .add(CExistential(alpha))
           .add(CExistential(beta))
@@ -508,7 +508,7 @@ def synthesizesTo(
         delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
         functionType = TFunction(TExistential(alpha), TExistential(beta))
       } yield (
-        TEAbstraction(arg, typedRet, functionType),
+        TELambda(arg, typedRet, functionType),
         delta
       )
     }
@@ -542,9 +542,12 @@ def synthesizesTo(
   }
 }
 
-def synth(expr: Expression): Eff[TypedExpression] = {
+def synth(
+    expr: Expression,
+    context: Context = Context()
+): Eff[TypedExpression] = {
   for {
-    (typedExpression, context) <- synthesizesTo(Context(), expr)
+    (typedExpression, context) <- synthesizesTo(context, expr)
     resultType = applyContext(typedExpression._type, context)
     result = typedExpression.modify(_._type).setTo(resultType)
   } yield result

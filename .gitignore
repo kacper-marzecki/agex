@@ -5,3 +5,5 @@
 */*/.bloop
 target
 .bsp
+out
+.idea

@@ -11,15 +11,15 @@ import Literal.*
 object SynthTest extends DefaultRunnableSpec {
   val litString = ELiteral(LString("string"))
   val litBool = ELiteral(LBool(false))
-  val idFunction = EAbstraction("x", EVariable("x"))
+  val idFunction = ELambda("x", EVariable("x"))
   val strBoolTuple = ETuple(litString, litBool)
 
-  def runSynth(expr: Expression) =
-    synth(expr)
-      // .tap(it => putStrLn(it.toString).orDie)
+  def runSynth(expr: Expression, context: Context = Context()) =
+    synth(expr, context)
+      .tap(prettyPrint)
       .map(_._type)
-      .provideSomeLayer[ZEnv](MutableState.live)
-      .tapError(it => putStrLn(it.show))
+      .provideSomeLayer[ZEnv](CompilerState.live)
+      .tapError(prettyPrint)
 
   def spec = suite("SynthTest")(
     testM("literal has its type") {
@@ -51,7 +51,7 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("tuple is created by application of a lambda") {
       val expr = EApplication(
-        EAbstraction("x", ETuple(EVariable("x"), EVariable("x"))),
+        ELambda("x", ETuple(EVariable("x"), EVariable("x"))),
         litBool
       )
       assertM(runSynth(expr))(
@@ -60,7 +60,7 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("nested tuple is created by application of a lambda") {
       val expr = EApplication(
-        EAbstraction(
+        ELambda(
           "x",
           ETuple(EVariable("x"), ETuple(EVariable("x"), EVariable("x")))
         ),
@@ -102,7 +102,7 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("function can be curried") {
       val plusFunction = EAnnotation(
-        EAbstraction("a", EAbstraction("b", ELiteral(LInt(1)))),
+        ELambda("a", ELambda("b", ELiteral(LInt(1)))),
         TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
       )
       val expr = EApplication(
@@ -120,7 +120,7 @@ object SynthTest extends DefaultRunnableSpec {
       // let apply = fun(function, arg) -> function(arg)
       // apply(plus1, 1)
       val plusFunction = EAnnotation(
-        EAbstraction("a", EAbstraction("b", ELiteral(LInt(1)))),
+        ELambda("a", ELambda("b", ELiteral(LInt(1)))),
         TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
       )
       val expr = ELet(
@@ -131,9 +131,9 @@ object SynthTest extends DefaultRunnableSpec {
           EApplication(EVariable("plus"), ELiteral(LInt(1))),
           ELet(
             "apply",
-            EAbstraction(
+            ELambda(
               "function",
-              EAbstraction(
+              ELambda(
                 "arg",
                 EApplication(EVariable("function"), EVariable("arg"))
               )
@@ -146,6 +146,27 @@ object SynthTest extends DefaultRunnableSpec {
         )
       )
       assertM(runSynth(expr))(
+        equalTo(TLiteral(LTInt))
+      )
+    },
+    testM("gets a function from initial context") {
+      val ctx = Context(
+        Vector(
+          ContextElement.CTypedVariable(
+            "+",
+            TFunction(
+              TLiteral(LTInt),
+              TFunction(TLiteral(LTInt), TLiteral(LTInt))
+            )
+          )
+        )
+      )
+
+      val exp = EApplication(
+        EApplication(EVariable("+"), ELiteral(LInt(1))),
+        ELiteral(LInt(1))
+      )
+      assertM(runSynth(exp, ctx))(
         equalTo(TLiteral(LTInt))
       )
     }
