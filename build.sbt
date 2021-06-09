@@ -10,8 +10,10 @@ lazy val root = project
       "com.novocode" % "junit-interface" % "0.11" % "test",
       "org.typelevel" %% "cats-core" % "2.6.1",
       "dev.zio" %% "zio" % "1.0.9",
+      "com.softwaremill.quicklens" %% "quicklens" % "1.7.4",
       "dev.zio" %% "zio-test" % "1.0.9" % "test",
       "dev.zio" %% "zio-test-sbt" % "1.0.9" % "test"
     ),
-    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
+    scalacOptions ++= Seq("-source:future")
   )

@@ -1,8 +1,8 @@
-import zio._
-import zio.console._
-import zio.test._
-import zio.test.Assertion._
-import zio.test.environment._
+import zio.*
+import zio.console.*
+import zio.test.*
+import zio.test.Assertion.*
+import zio.test.environment.*
 import java.io.IOException
 import Type.*
 import LiteralType.*

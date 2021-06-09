@@ -7,7 +7,38 @@ enum Literal {
   case LUnit
 }
 
-case class TypedExpression(expression: Expression, _type: Type)
+enum TypedExpression(val _type: Type) {
+  case TEVariable(name: String, override val _type: Type)
+      extends TypedExpression(_type)
+  case TELiteral(it: Literal, override val _type: Type)
+      extends TypedExpression(_type)
+  case TEAbstraction(
+      arg: String,
+      body: TypedExpression,
+      override val _type: Type
+  ) extends TypedExpression(_type)
+  case TEApplication(
+      fun: TypedExpression,
+      arg: TypedExpression,
+      override val _type: Type
+  ) extends TypedExpression(_type)
+  case TELet(
+      name: String,
+      value: TypedExpression,
+      body: TypedExpression,
+      override val _type: Type
+  ) extends TypedExpression(_type)
+  case TEAnnotation(
+      expr: TypedExpression,
+      annotatedType: Type,
+      override val _type: Type
+  ) extends TypedExpression(_type)
+  case TETuple(
+      one: TypedExpression,
+      two: TypedExpression,
+      override val _type: Type
+  ) extends TypedExpression(_type)
+}
 
 enum Expression {
   case EVariable(name: String)
@@ -15,7 +46,7 @@ enum Expression {
   case EAbstraction(arg: String, body: Expression)
   case EApplication(fun: Expression, arg: Expression)
   case ELet(name: String, value: Expression, body: Expression)
-  case EAnnotation(expr: Expression, _type: Type)
+  case EAnnotation(expr: Expression, annotatedType: Type)
   case ETuple(one: Expression, two: Expression)
 }
 
