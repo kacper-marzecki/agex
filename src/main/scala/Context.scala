@@ -8,7 +8,6 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def add(it: ContextElement) =
     this.copy(elements = elements.appended(it))
 
-  // TODO throws
   def splitAt(it: ContextElement): IO[ElementNotFound, (Context, Context)] = {
     elements.findIndexOf(it) match {
       case None => fail(ElementNotFound(this, it))

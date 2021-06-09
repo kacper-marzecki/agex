@@ -12,6 +12,7 @@ import Expression.*
 import ContextElement.*
 import TypedExpression.*
 import MutableState.makeExistential
+import com.softwaremill.quicklens.*
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -28,7 +29,6 @@ def assertLiteralChecksAgainst(
   }
 }
 
-// TODO rename /w overload
 def literalSynthesizesTo(literal: Literal): LiteralType = {
   literal match {
     case LChar(_)   => LTChar
@@ -40,8 +40,7 @@ def literalSynthesizesTo(literal: Literal): LiteralType = {
   }
 }
 
-/// Figure 11.
-// enrich by a type ?
+/// Fig 11
 def checksAgainst(
     context: Context,
     expr: Expression,
@@ -73,7 +72,6 @@ def checksAgainst(
         (typed, theta) <- checksAgainst(gamma, expression, quantType)
         delta <- theta.drop(variable)
       } yield (typed, delta)
-      // checksAgainst(gamma, expression, quantType).flatMap(_.drop(variable))
     }
     //xI
     case (ETuple(one, two), TProduct(oneType, twoType)) => {
@@ -81,9 +79,6 @@ def checksAgainst(
         (typedOne, gamma) <- checksAgainst(context, one, oneType)
         (typedTwo, theta) <- checksAgainst(gamma, two, twoType)
       } yield (TETuple(typedOne, typedTwo, _type), theta)
-      // checksAgainst(context, one, oneType).flatMap(
-      //   checksAgainst(_, two, twoType)
-      // )
     }
     //Sub
     case _ => {
@@ -95,24 +90,17 @@ def checksAgainst(
           applyContext(_type, theta)
         )
       } yield (typed, result)
-      // synthesizesTo(context, expr)
-      //   .flatMap { case (a, theta) =>
-      //     subtype(
-      //       theta,
-      //       applyContext(a._type, theta),
-      //       applyContext(_type, theta)
-      //     )
-      //   }
     }
   }
 }
 
-//Figure 11
+//Fig. 11
+// returns (typed expression of the argument, return type of the function, context)
 def applicationSynthesizesTo(
     context: Context,
     _type: Type,
     expr: Expression
-): Eff[(TypedExpression, Context)] = {
+): Eff[(TypedExpression, Type, Context)] = {
   _type match {
     //alphaApp
     case TExistential(name) => {
@@ -133,8 +121,8 @@ def applicationSynthesizesTo(
             )
           )
         )
-        delta <- checksAgainst(gamma, expr, TExistential(alpha1))
-      } yield (typed(TExistential(alpha2)), delta)
+        (typedExpr, delta) <- checksAgainst(gamma, expr, TExistential(alpha1))
+      } yield (typedExpr, TExistential(alpha2), delta)
     }
     //ForallApp
     case TQuantification(name, quantType) => {
@@ -152,13 +140,13 @@ def applicationSynthesizesTo(
     //App
     case TFunction(arg, ret) =>
       for {
-        delta <- checksAgainst(context, expr, arg)
-      } yield (typed(ret), delta)
+        (typedExpr, delta) <- checksAgainst(context, expr, arg)
+      } yield (typedExpr, ret, delta)
     case _ => fail(CannotApplyType(_type))
   }
 }
 
-/// Substitution is written in the paper as [α^/α]A which means, α is replaced with α^ in all occurrences in A
+/// a is replaced with b in all occurrences in A
 def substitution(a: Type, alpha: String, b: Type): Type = {
   a match {
     case _: TLiteral     => a
@@ -191,7 +179,7 @@ def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
     ZIO.fail(ifFail)
   }
 
-/// Figure 7
+/// Fig 7
 def isWellFormed(context: Context, _type: Type): Boolean = {
   _type match {
     case _: TLiteral     => true
@@ -207,11 +195,7 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
   }
 }
 
-/// This corresponds to the FV call in Figure 9 Rule <:InstantiateL and <:InstantiateR
-/// It checks if a existential variable already occurs in a type to be able to find and panic on cycles
-///
-/// Alas, I could not find a definition of the FV function and had to copy the implementation of
-/// https://github.com/ollef/Bidirectional and https://github.com/atennapel/bidirectional.js
+// Fig 9: α^ !∈ FV(B)
 def occursIn(alpha: String, a: Type): Boolean = {
   a match {
     case TLiteral(_)     => false
@@ -304,10 +288,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           fail(CircularInstantiation(context, name, a))
         }
       }
+      case _ => fail(CannotSubtype(context, a, b))
     }
   } yield delta
 
-/// Figure 10
+// Fig 10
 def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
   for {
     split <- context.splitAt(CExistential(alpha))
@@ -368,7 +353,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
   } yield result
 }
 
-/// Figure 10
+/// Fig 10
 def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
   for {
     split <- context.splitAt(CExistential(alpha))
@@ -454,7 +439,7 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
       }
   } yield result
 
-/// Figure 8
+/// Fig 8
 def applyContext(_type: Type, context: Context): Type = {
   _type match {
     case TLiteral(_)  => _type
@@ -482,24 +467,30 @@ def synthesizesTo(
     context: Context,
     expr: Expression
 ): Eff[(TypedExpression, Context)] = {
-  // TODO continue conversion to TypedExpression
   expr match {
     //1I=>
     case ELiteral(literal) =>
-      succeed((TELiteral(literal, literalSynthesizesTo(literal)), context))
+      succeed(
+        (TELiteral(literal, TLiteral(literalSynthesizesTo(literal))), context)
+      )
     //Var
     case EVariable(name) => {
       context
         .getAnnotation(name)
         .fold(ZIO.fail(AnnotationNotFound(context, name)))(annotation =>
-          succeed((typed(annotation), context))
+          succeed((TEVariable(name, annotation), context))
         )
     }
     //Anno
     case EAnnotation(expression, annType) => {
       if (isWellFormed(context, annType)) {
-        val delta = checksAgainst(context, expression, annType)
-        delta.map(it => (typed(annType), it))
+        for {
+          (typedExpression, delta) <- checksAgainst(
+            context,
+            expression,
+            annType
+          )
+        } yield (TEAnnotation(typedExpression, annType, annType), delta)
       } else {
         fail(TypeNotWellFormed(context, annType))
       }
@@ -513,62 +504,53 @@ def synthesizesTo(
           .add(CExistential(alpha))
           .add(CExistential(beta))
           .add(CTypedVariable(arg, TExistential(alpha)))
-        delta <- checksAgainst(gamma, ret, TExistential(beta))
-          .flatMap(
-            _.drop(CTypedVariable(arg, TExistential(alpha)))
-          )
+        (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(beta))
+        delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
+        functionType = TFunction(TExistential(alpha), TExistential(beta))
       } yield (
-        typed(TFunction(TExistential(alpha), TExistential(beta))),
+        TEAbstraction(arg, typedRet, functionType),
         delta
       )
     }
     case ETuple(one, two) => {
       for {
-        oneResult <- synthesizesTo(context, one)
-        (oneType, gamma) = oneResult
-        twoResult <- synthesizesTo(gamma, two)
-        (twoType, delta) = twoResult
-      } yield (typed(TProduct(oneType._type, twoType._type)), delta)
+        (oneTyped, gamma) <- synthesizesTo(context, one)
+        (twoTyped, delta) <- synthesizesTo(gamma, two)
+        tupleType = TProduct(oneTyped._type, twoTyped._type)
+      } yield (TETuple(oneTyped, twoTyped, tupleType), delta)
     }
     case ELet(name, expr, body) => {
       for {
-        expressionResult <- synthesizesTo(context, expr)
-        (exprType, gamma) = expressionResult
-        exprVariable = CTypedVariable(name, exprType._type)
+        (exprTyped, gamma) <- synthesizesTo(context, expr)
+        exprVariable = CTypedVariable(name, exprTyped._type)
         theta = gamma.add(exprVariable)
-        bodyResult <- synthesizesTo(theta, body)
-        (bodyType, phi) = bodyResult
+        (bodyTyped, phi) <- synthesizesTo(theta, body)
         delta <- phi.insertInPlace(exprVariable, List())
-      } yield (typed(bodyType._type), delta)
+      } yield (TELet(name, exprTyped, bodyTyped, bodyTyped._type), delta)
     }
     //->E
     case EApplication(fun, arg) => {
       for {
-        funResult <- synthesizesTo(context, fun)
-        (funType, theta) = funResult
-        appResult <- applicationSynthesizesTo(
+        (funTyped, theta) <- synthesizesTo(context, fun)
+        (argTyped, applicationType, delta) <- applicationSynthesizesTo(
           theta,
-          applyContext(funType._type, theta),
+          applyContext(funTyped._type, theta),
           arg
         )
-      } yield appResult
+      } yield (TEApplication(funTyped, argTyped, applicationType), delta)
     }
   }
 }
-def synth(expr: Expression): Eff[Type] = {
+
+def synth(expr: Expression): Eff[TypedExpression] = {
   for {
-    synthResult <- synthesizesTo(Context(), expr)
-    (resultType, context) = synthResult
-    // watch oot
-    result = applyContext(resultType._type, context)
-    _ <- putStrLn(resultType.copy(_type = result).toString).orDie
+    (typedExpression, context) <- synthesizesTo(Context(), expr)
+    resultType = applyContext(typedExpression._type, context)
+    result = typedExpression.modify(_._type).setTo(resultType)
   } yield result
 }
 
 object App extends zio.App {
-  val program: ZIO[Env, Throwable, Unit] = ZIO.unit
   def run(args: List[String]): zio.URIO[zio.ZEnv, zio.ExitCode] =
-    (program.provideSomeLayer[ZEnv](MutableState.live) *> putStrLn(
-      "jek"
-    )).exitCode
+    putStrLn("Nothing yet").exitCode
 }

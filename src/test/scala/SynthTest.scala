@@ -1,8 +1,8 @@
-import zio._
-import zio.console._
-import zio.test._
-import zio.test.Assertion._
-import zio.test.environment._
+import zio.*
+import zio.console.*
+import zio.test.*
+import zio.test.Assertion.*
+import zio.test.environment.*
 import Expression.*
 import Type.*
 import LiteralType.*
@@ -16,38 +16,40 @@ object SynthTest extends DefaultRunnableSpec {
 
   def runSynth(expr: Expression) =
     synth(expr)
+      // .tap(it => putStrLn(it.toString).orDie)
+      .map(_._type)
       .provideSomeLayer[ZEnv](MutableState.live)
       .tapError(it => putStrLn(it.show))
 
   def spec = suite("SynthTest")(
-    testM("simple") {
+    testM("literal has its type") {
       assertM(runSynth(litString))(
         equalTo(TLiteral(LTString))
       )
     },
-    testM("application String") {
+    testM("Id application with string gives back string") {
       val expr = EApplication(idFunction, litString)
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTString))
       )
     },
-    testM("application Bool") {
+    testM("Id application with boolean gives back boolean") {
       val expr = EApplication(idFunction, litBool)
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTBool))
       )
     },
-    testM("lambda") {
+    testM("Id has a x -> x type") {
       assertM(runSynth(idFunction))(
         equalTo(TFunction(TExistential("t1"), TExistential("t1")))
       )
     },
-    testM("tuples") {
+    testM("Tuple type is correctly inferred") {
       assertM(runSynth(strBoolTuple))(
         equalTo(TProduct(TLiteral(LTString), TLiteral(LTBool)))
       )
     },
-    testM("tuple in lambda") {
+    testM("tuple is created by application of a lambda") {
       val expr = EApplication(
         EAbstraction("x", ETuple(EVariable("x"), EVariable("x"))),
         litBool
@@ -56,7 +58,7 @@ object SynthTest extends DefaultRunnableSpec {
         equalTo(TProduct(TLiteral(LTBool), TLiteral(LTBool)))
       )
     },
-    testM("nested Tuple") {
+    testM("nested tuple is created by application of a lambda") {
       val expr = EApplication(
         EAbstraction(
           "x",
@@ -73,7 +75,7 @@ object SynthTest extends DefaultRunnableSpec {
         )
       )
     },
-    testM("general let") {
+    testM("Id function is bound and applied by reference") {
       val expr = ELet(
         "idFunction",
         idFunction,
@@ -85,7 +87,7 @@ object SynthTest extends DefaultRunnableSpec {
         )
       )
     },
-    testM("id with universal quantifier") {
+    testM("Id annotated explicitly as forall a. a -> a works") {
       val expr = ELet(
         "someFunction",
         EAnnotation(
@@ -98,7 +100,7 @@ object SynthTest extends DefaultRunnableSpec {
         equalTo(TLiteral(LTBool))
       )
     },
-    testM("curried function") {
+    testM("function can be curried") {
       val plusFunction = EAnnotation(
         EAbstraction("a", EAbstraction("b", ELiteral(LInt(1)))),
         TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
@@ -112,6 +114,7 @@ object SynthTest extends DefaultRunnableSpec {
       )
     },
     testM("partial application") {
+      // the following code is roughly represented in this test:
       // let plus = fun(a, b) -> a + b
       // let plus1 = plus(1)
       // let apply = fun(function, arg) -> function(arg)
