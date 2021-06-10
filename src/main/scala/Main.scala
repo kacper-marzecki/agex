@@ -547,9 +547,10 @@ def synth(
     context: Context = Context()
 ): Eff[TypedExpression] = {
   for {
-    (typedExpression, context) <- synthesizesTo(context, expr)
-    resultType = applyContext(typedExpression._type, context)
+    (typedExpression, resultContext) <- synthesizesTo(context, expr)
+    resultType = applyContext(typedExpression._type, resultContext)
     result = typedExpression.modify(_._type).setTo(resultType)
+    _ <- prettyPrint(resultContext)
   } yield result
 }
 

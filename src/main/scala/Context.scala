@@ -3,10 +3,38 @@ import zio.*
 import ZIO.{fail, succeed}
 import AppError.*
 import ContextElement.*
+type AddResult[A <: ContextElement] = A match {
+  case CTypedVariable => Either[ShadowedVariableName, Context]
+  case ?              => Context
+}
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
+  lazy val names = elements.mapFilter {
+    case tv: CTypedVariable => Some(tv.name)
+    case _                  => None
+  }.toSet
+
   def add(it: ContextElement) =
     this.copy(elements = elements.appended(it))
+
+  // watch for name shadowing
+  // def safeAdd[A <: ContextElement](element: A): AddResult[A] =
+  //   element match {
+  //     case it: CTypedVariable =>
+  //       if (names.contains(it.name)) {
+  //         Left[ShadowedVariableName, Context](
+  //           ShadowedVariableName(this, it.name)
+  //         ).asInstanceOf[AddResult[A]]
+  //       } else {
+  //         Right[ShadowedVariableName, Context](
+  //           this.copy(elements = elements.appended(it))
+  //         ).asInstanceOf[AddResult[A]]
+  //       }
+  //     case _ =>
+  //       this
+  //         .copy(elements = elements.appended(element))
+  //         .asInstanceOf[AddResult[A]]
+  //   }
 
   def splitAt(it: ContextElement): IO[ElementNotFound, (Context, Context)] = {
     elements.findIndexOf(it) match {
@@ -46,6 +74,7 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def hasExistential(name: String): Boolean =
     elements.contains(CExistential(name))
 
+  // only for quantifiations
   def hasVariable(name: String): Boolean =
     elements.contains(CVariable(name))
 

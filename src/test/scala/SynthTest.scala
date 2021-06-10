@@ -13,10 +13,13 @@ object SynthTest extends DefaultRunnableSpec {
   val litBool = ELiteral(LBool(false))
   val idFunction = ELambda("x", EVariable("x"))
   val strBoolTuple = ETuple(litString, litBool)
-
+  val annotatedId = EAnnotation(
+    idFunction,
+    TQuantification("a", TFunction(TVariable("a"), TVariable("a")))
+  )
   def runSynth(expr: Expression, context: Context = Context()) =
     synth(expr, context)
-      .tap(prettyPrint)
+      // .tap(prettyPrint)
       .map(_._type)
       .provideSomeLayer[ZEnv](CompilerState.live)
       .tapError(prettyPrint)
@@ -167,6 +170,61 @@ object SynthTest extends DefaultRunnableSpec {
         ELiteral(LInt(1))
       )
       assertM(runSynth(exp, ctx))(
+        equalTo(TLiteral(LTInt))
+      )
+    },
+    testM("fail on shadowed variable names ") {
+      val ctx = Context(
+        Vector(
+          ContextElement.CTypedVariable(
+            "+",
+            TFunction(
+              TLiteral(LTInt),
+              TFunction(TLiteral(LTInt), TLiteral(LTInt))
+            )
+          )
+        )
+      )
+
+      // let a = "asd"
+      // let b = a -> 1 + a
+      // b(1)
+      val exp = ELet(
+        "a",
+        ELiteral(LString("asd")),
+        ELet(
+          "b",
+          ELambda(
+            "a",
+            EApplication(
+              EApplication(EVariable("+"), ELiteral(LInt(1))),
+              EVariable("a")
+            )
+          ),
+          EApplication(EVariable("b"), ELiteral(LInt(1)))
+        )
+      )
+
+      assertM(runSynth(exp, ctx).flip)(
+        equalTo(
+          AppError.TypesNotEqual(
+            _typeA = TLiteral(literalType = LTString),
+            _typeB = TLiteral(literalType = LTInt)
+          )
+        )
+      )
+    },
+    testM("args in other functions are not considered as shadowed") {
+      val exp = ELet(
+        "id",
+        idFunction,
+        ELet(
+          "a",
+          ELiteral(LInt(1)),
+          ELiteral(LInt(1))
+        )
+      )
+      assertM(runSynth(exp))(
         equalTo(TLiteral(LTInt))
       )
     }
