@@ -13,6 +13,7 @@ import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
+import cats.syntax.validated
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -74,11 +75,29 @@ def checksAgainst(
       } yield (typed, delta)
     }
     //xI
-    case (ETuple(one, two), TProduct(oneType, twoType)) => {
+    // case (ETuple(one, two), TProduct(oneType, twoType)) => {
+    //   for {
+    //     (typedOne, gamma) <- checksAgainst(context, one, oneType)
+    //     (typedTwo, theta) <- checksAgainst(gamma, two, twoType)
+    //   } yield (TETuple(typedOne, typedTwo, _type), theta)
+    // }
+    case (ENewTuple(values), TNewProduct(valueTypes))
+        if values.length == valueTypes.length => {
+      case class SynthResult(typed: List[TypedExpression], context: Context)
       for {
-        (typedOne, gamma) <- checksAgainst(context, one, oneType)
-        (typedTwo, theta) <- checksAgainst(gamma, two, twoType)
-      } yield (TETuple(typedOne, typedTwo, _type), theta)
+        result <- ZIO.foldRight(values.zip(valueTypes))(
+          SynthResult(Nil, context)
+        ) { case ((expression, _type), result) =>
+          for {
+            (elemTyped, gamma) <- checksAgainst(
+              result.context,
+              expression,
+              _type
+            )
+          } yield SynthResult(elemTyped :: result.typed, gamma)
+        }
+        resultType = TNewProduct(result.typed.map(_._type))
+      } yield (TENewTuple(result.typed, resultType), result.context)
     }
     //Sub
     case _ => {
@@ -164,6 +183,8 @@ def substitution(a: Type, alpha: String, b: Type): Type = {
         substitution(one, alpha, b),
         substitution(two, alpha, b)
       )
+    case TNewProduct(valueTypes) =>
+      TNewProduct(valueTypes.map(substitution(_, alpha, b)))
     case TFunction(arg, ret) =>
       TFunction(
         substitution(arg, alpha, b),
@@ -192,6 +213,8 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
       context.hasExistential(name) || context.getSolved(name).isDefined
     case TProduct(one, two) =>
       isWellFormed(context, one) && isWellFormed(context, two)
+    case TNewProduct(valueTypes) =>
+      valueTypes.forall(isWellFormed(context, _))
   }
 }
 
@@ -209,8 +232,9 @@ def occursIn(alpha: String, a: Type): Boolean = {
         return occursIn(alpha, t);
       }
     }
-    case TExistential(name) => alpha == name
-    case TProduct(one, two) => occursIn(alpha, one) || occursIn(alpha, two)
+    case TExistential(name)      => alpha == name
+    case TProduct(one, two)      => occursIn(alpha, one) || occursIn(alpha, two)
+    case TNewProduct(valueTypes) => valueTypes.exists(occursIn(alpha, _))
   }
 }
 
@@ -283,7 +307,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       //<:InstantiateR
       case (_, TExistential(name)) => {
         if (!occursIn(name, a)) {
-          instantiateR(context, a, name)
+          instantiateR(context, name, a)
         } else {
           fail(CircularInstantiation(context, name, a))
         }
@@ -307,7 +331,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
       } else {
         b match {
           //InstLArr
-          case TFunction(arg, ret) => {
+          case TFunction(arg, returnType) => {
             for {
               alpha1 <- CompilerState.makeExistential
               alpha2 <- CompilerState.makeExistential
@@ -325,8 +349,17 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
                   )
                 )
               )
-              theta <- instantiateR(gamma, arg, alpha1)
-              delta <- instantiateL(theta, alpha2, applyContext(ret, theta))
+              // TODO check if this can be used in generalizing tuple instantiation
+              // TODO check if this is even necessary for a product type
+              // can a product type contain a non-monotype ? check with a function forall a. a -> (a, Int)
+              // idea: in case of functions, the instantiation of the body is dependant on the argument, because it can be used inside the body
+              //       maybe we can parallelize this for product types
+              theta <- instantiateR(gamma, alpha1, arg)
+              delta <- instantiateL(
+                theta,
+                alpha2,
+                applyContext(returnType, theta)
+              )
             } yield delta
           }
           //InstAIIR
@@ -354,7 +387,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
 }
 
 /// Fig 10
-def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
+def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
   for {
     split <- context.splitAt(CExistential(alpha))
     (left, right) = split
@@ -387,7 +420,7 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
                 )
               )
               theta <- instantiateL(gamma, alpha1, arg)
-              delta <- instantiateR(theta, applyContext(ret, theta), alpha2)
+              delta <- instantiateR(theta, alpha2, applyContext(ret, theta))
             } yield delta
           }
           //InstRAllL
@@ -399,34 +432,34 @@ def instantiateR(context: Context, a: Type, alpha: String): Eff[Context] =
                 .add(CExistential(beta1))
               theta <- instantiateR(
                 gamma,
-                substitution(b, beta, TExistential(beta1)),
-                alpha
+                alpha,
+                substitution(b, beta, TExistential(beta1))
               )
               delta <- theta.drop(CMarker(beta1))
             } yield delta
           }
-          case TProduct(one, two) => {
-            for {
-              alpha1 <- CompilerState.makeExistential
-              beta1 <- CompilerState.makeExistential
-              gamma <- context.insertInPlace(
-                CExistential(alpha),
-                List(
-                  CExistential(beta1),
-                  CExistential(alpha1),
-                  CSolved(
-                    alpha,
-                    TProduct(
-                      TExistential(alpha1),
-                      TExistential(beta1)
-                    )
-                  )
-                )
-              )
-              theta <- instantiateL(gamma, alpha1, one)
-              delta <- instantiateR(theta, applyContext(two, theta), beta1)
-            } yield delta
-          }
+          // case TProduct(one, two) => {
+          //   for {
+          //     alpha1 <- CompilerState.makeExistential
+          //     beta1 <- CompilerState.makeExistential
+          //     gamma <- context.insertInPlace(
+          //       CExistential(alpha),
+          //       List(
+          //         CExistential(beta1),
+          //         CExistential(alpha1),
+          //         CSolved(
+          //           alpha,
+          //           TProduct(
+          //             TExistential(alpha1),
+          //             TExistential(beta1)
+          //           )
+          //         )
+          //       )
+          //     )
+          //     theta <- instantiateL(gamma, alpha1, one)
+          //     delta <- instantiateR(theta, beta1, applyContext(two, theta))
+          //   } yield delta
+          // }
           //InstRReach
           case TExistential(beta) => {
             context.insertInPlace(
@@ -460,6 +493,8 @@ def applyContext(_type: Type, context: Context): Type = {
         applyContext(oneType, context),
         applyContext(twoType, context)
       )
+    case TNewProduct(valueTypes) =>
+      TNewProduct(valueTypes.map(applyContext(_, context)))
   }
 }
 
@@ -513,12 +548,26 @@ def synthesizesTo(
         delta
       )
     }
-    case ETuple(one, two) => {
+    // case ETuple(one, two) => {
+    //   for {
+    //     (oneTyped, gamma) <- synthesizesTo(context, one)
+    //     (twoTyped, delta) <- synthesizesTo(gamma, two)
+    //     tupleType = TProduct(oneTyped._type, twoTyped._type)
+    //   } yield (TETuple(oneTyped, twoTyped, tupleType), delta)
+    // }
+    case ENewTuple(values) => {
+      case class SynthResult(typed: List[TypedExpression], context: Context)
+      // foldRight to avoid appending to List
+      // TODO: change to Chunk, or other O(1) append data structure
       for {
-        (oneTyped, gamma) <- synthesizesTo(context, one)
-        (twoTyped, delta) <- synthesizesTo(gamma, two)
-        tupleType = TProduct(oneTyped._type, twoTyped._type)
-      } yield (TETuple(oneTyped, twoTyped, tupleType), delta)
+        result <- ZIO.foldRight(values)(SynthResult(Nil, context)) {
+          (elem, result) =>
+            for {
+              (elemTyped, gamma) <- synthesizesTo(result.context, elem)
+            } yield SynthResult(elemTyped :: result.typed, gamma)
+        }
+        tupleType = TNewProduct(result.typed.map(_._type))
+      } yield (TENewTuple(result.typed, tupleType), result.context)
     }
     case ELet(name, expr, body) => {
       for {

@@ -8,16 +8,10 @@ import Type.*
 import LiteralType.*
 import Literal.*
 import ContextElement.*
+import TestCommonExpressions.*
 
 object SynthTest extends DefaultRunnableSpec {
-  val litString = ELiteral(LString("string"))
-  val litBool = ELiteral(LBool(false))
-  val idFunction = ELambda("x", EVariable("x"))
-  val strBoolTuple = ETuple(litString, litBool)
-  val annotatedId = EAnnotation(
-    idFunction,
-    TQuantification("a", TFunction(TVariable("a"), TVariable("a")))
-  )
+
   def runSynth(expr: Expression, context: Context = Context()) =
     synth(expr, context)
       // .tap(prettyPrint(_, "synthResult"))
@@ -50,31 +44,38 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("Tuple type is correctly inferred") {
       assertM(runSynth(strBoolTuple))(
-        equalTo(TProduct(TLiteral(LTString), TLiteral(LTBool)))
+        equalTo(TNewProduct(List(TLiteral(LTString), TLiteral(LTBool))))
       )
     },
     testM("tuple is created by application of a lambda") {
       val expr = EApplication(
-        ELambda("x", ETuple(EVariable("x"), EVariable("x"))),
+        ELambda("x", ENewTuple(List(EVariable("x"), EVariable("x")))),
         litBool
       )
       assertM(runSynth(expr))(
-        equalTo(TProduct(TLiteral(LTBool), TLiteral(LTBool)))
+        equalTo(TNewProduct(List(TLiteral(LTBool), TLiteral(LTBool))))
       )
     },
     testM("nested tuple is created by application of a lambda") {
       val expr = EApplication(
         ELambda(
           "x",
-          ETuple(EVariable("x"), ETuple(EVariable("x"), EVariable("x")))
+          ENewTuple(
+            List(
+              EVariable("x"),
+              ENewTuple(List(EVariable("x"), EVariable("x")))
+            )
+          )
         ),
         litBool
       )
       assertM(runSynth(expr))(
         equalTo(
-          TProduct(
-            TLiteral(LTBool),
-            TProduct(TLiteral(LTBool), TLiteral(LTBool))
+          TNewProduct(
+            List(
+              TLiteral(LTBool),
+              TNewProduct(List(TLiteral(LTBool), TLiteral(LTBool)))
+            )
           )
         )
       )
@@ -87,7 +88,7 @@ object SynthTest extends DefaultRunnableSpec {
       )
       assertM(runSynth(expr))(
         equalTo(
-          TProduct(TLiteral(LTString), TLiteral(LTBool))
+          TNewProduct(List(TLiteral(LTString), TLiteral(LTBool)))
         )
       )
     },
