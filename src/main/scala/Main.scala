@@ -9,7 +9,6 @@ import Type.*
 import Literal.*
 import LiteralType.*
 import Expression.*
-import ContextElement.*
 import TypedExpression.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
@@ -59,8 +58,8 @@ def checksAgainst(
           TFunction(argType, bodyType)
         ) => {
       val typedVar = CTypedVariable(arg, argType)
-      val gamma = context.add(typedVar)
       for {
+        gamma <- context.add(typedVar)
         (typedBody, theta) <- checksAgainst(gamma, body, bodyType)
         delta <- theta.drop(typedVar)
       } yield (TELambda(arg, typedBody, _type), delta)
@@ -500,10 +499,11 @@ def synthesizesTo(
       for {
         alpha <- CompilerState.makeExistential
         beta <- CompilerState.makeExistential
-        gamma = context
-          .add(CExistential(alpha))
-          .add(CExistential(beta))
-          .add(CTypedVariable(arg, TExistential(alpha)))
+        gamma <-
+          context
+            .add(CExistential(alpha))
+            .add(CExistential(beta))
+            .add(CTypedVariable(arg, TExistential(alpha)))
         (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(beta))
         delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
         functionType = TFunction(TExistential(alpha), TExistential(beta))
@@ -523,7 +523,7 @@ def synthesizesTo(
       for {
         (exprTyped, gamma) <- synthesizesTo(context, expr)
         exprVariable = CTypedVariable(name, exprTyped._type)
-        theta = gamma.add(exprVariable)
+        theta <- gamma.add(exprVariable)
         (bodyTyped, phi) <- synthesizesTo(theta, body)
         delta <- phi.insertInPlace(exprVariable, List())
       } yield (TELet(name, exprTyped, bodyTyped, bodyTyped._type), delta)
@@ -550,7 +550,7 @@ def synth(
     (typedExpression, resultContext) <- synthesizesTo(context, expr)
     resultType = applyContext(typedExpression._type, resultContext)
     result = typedExpression.modify(_._type).setTo(resultType)
-    _ <- prettyPrint(resultContext)
+    // _ <- prettyPrint(resultContext)
   } yield result
 }
 

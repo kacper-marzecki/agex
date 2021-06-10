@@ -2,40 +2,46 @@ import cats.implicits.*
 import zio.*
 import ZIO.{fail, succeed}
 import AppError.*
-import ContextElement.*
+
 type AddResult[A <: ContextElement] = A match {
-  case CTypedVariable => Either[ShadowedVariableName, Context]
+  case CTypedVariable => IO[ShadowedVariableName, Context]
   case ?              => Context
 }
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
-  lazy val names = elements.mapFilter {
-    case tv: CTypedVariable => Some(tv.name)
-    case _                  => None
+  lazy val names = elements.mapFilter { it =>
+    it match {
+      case _: CTypedVariable => Some(it.name)
+      case _                 => None
+    }
   }.toSet
 
-  def add(it: ContextElement) =
-    this.copy(elements = elements.appended(it))
-
-  // watch for name shadowing
-  // def safeAdd[A <: ContextElement](element: A): AddResult[A] =
-  //   element match {
-  //     case it: CTypedVariable =>
-  //       if (names.contains(it.name)) {
-  //         Left[ShadowedVariableName, Context](
-  //           ShadowedVariableName(this, it.name)
-  //         ).asInstanceOf[AddResult[A]]
-  //       } else {
-  //         Right[ShadowedVariableName, Context](
-  //           this.copy(elements = elements.appended(it))
-  //         ).asInstanceOf[AddResult[A]]
-  //       }
-  //     case _ =>
-  //       this
-  //         .copy(elements = elements.appended(element))
-  //         .asInstanceOf[AddResult[A]]
-  //   }
-
+  /** Watches for name shadowing in the current context
+    *
+    * TODO: fix dirty hack - remove casting to AddResult[A].
+    *
+    * I don't know why, but the compiler doesn't think we return the
+    * AddResult[A] match type.
+    * https://dotty.epfl.ch/docs/reference/new-types/match-types.html
+    */
+  def add[A <: ContextElement](element: A): AddResult[A] = {
+    element match {
+      case _: CTypedVariable =>
+        if (names.contains(element.name)) {
+          fail(
+            ShadowedVariableName(this, element.name)
+          )
+            .asInstanceOf[AddResult[A]]
+        } else {
+          succeed(this.copy(elements = elements.appended(element)))
+            .asInstanceOf[AddResult[A]]
+        }
+      case _ =>
+        this
+          .copy(elements = elements.appended(element))
+          .asInstanceOf[AddResult[A]]
+    }
+  }
   def splitAt(it: ContextElement): IO[ElementNotFound, (Context, Context)] = {
     elements.findIndexOf(it) match {
       case None => fail(ElementNotFound(this, it))

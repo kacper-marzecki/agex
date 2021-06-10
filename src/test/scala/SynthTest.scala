@@ -19,10 +19,10 @@ object SynthTest extends DefaultRunnableSpec {
   )
   def runSynth(expr: Expression, context: Context = Context()) =
     synth(expr, context)
-      // .tap(prettyPrint)
+      // .tap(prettyPrint(_, "synthResult"))
       .map(_._type)
       .provideSomeLayer[ZEnv](CompilerState.live)
-      .tapError(prettyPrint)
+  // .tapError(prettyPrint(_, "synthError"))
 
   def spec = suite("SynthTest")(
     testM("literal has its type") {
@@ -155,7 +155,7 @@ object SynthTest extends DefaultRunnableSpec {
     testM("gets a function from initial context") {
       val ctx = Context(
         Vector(
-          ContextElement.CTypedVariable(
+          CTypedVariable(
             "+",
             TFunction(
               TLiteral(LTInt),
@@ -176,7 +176,7 @@ object SynthTest extends DefaultRunnableSpec {
     testM("fail on shadowed variable names ") {
       val ctx = Context(
         Vector(
-          ContextElement.CTypedVariable(
+          CTypedVariable(
             "+",
             TFunction(
               TLiteral(LTInt),
@@ -185,7 +185,6 @@ object SynthTest extends DefaultRunnableSpec {
           )
         )
       )
-
       // let a = "asd"
       // let b = a -> 1 + a
       // b(1)
@@ -204,15 +203,11 @@ object SynthTest extends DefaultRunnableSpec {
           EApplication(EVariable("b"), ELiteral(LInt(1)))
         )
       )
-
-      assertM(runSynth(exp, ctx).flip)(
-        equalTo(
-          AppError.TypesNotEqual(
-            _typeA = TLiteral(literalType = LTString),
-            _typeB = TLiteral(literalType = LTInt)
-          )
-        )
-      )
+      val eff = runSynth(exp, ctx).flip
+      assertM(eff)(Assertion.assertion("raises correct error")() {
+        case it: AppError.ShadowedVariableName if it.name == "a" => true
+        case _                                                   => false
+      })
     },
     testM("args in other functions are not considered as shadowed") {
       val exp = ELet(
