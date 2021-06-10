@@ -74,12 +74,11 @@ enum LiteralType {
   case LTBool
 }
 
-enum ContextElement(val name: String) {
-  case CVariable(override val name: String) extends ContextElement(name)
-  case CExistential(override val name: String) extends ContextElement(name)
-  case CSolved(override val name: String, _type: Type)
-      extends ContextElement(name)
-  case CTypedVariable(override val name: String, _type: Type)
-      extends ContextElement(name)
-  case CMarker(override val name: String) extends ContextElement(name)
-}
+sealed trait ContextElement(val name: String)
+case class CVariable(override val name: String) extends ContextElement(name)
+case class CExistential(override val name: String) extends ContextElement(name)
+case class CSolved(override val name: String, _type: Type)
+    extends ContextElement(name)
+case class CTypedVariable(override val name: String, _type: Type)
+    extends ContextElement(name)
+case class CMarker(override val name: String) extends ContextElement(name)

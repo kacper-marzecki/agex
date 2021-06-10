@@ -6,17 +6,13 @@ import zio.test.environment.*
 import java.io.IOException
 import Type.*
 import LiteralType.*
-import ContextElement.*
-
-def solved(name: String, _type: Type): CSolved =
-  CSolved(name, _type)
 
 object ContextTest extends DefaultRunnableSpec {
-  val solved1 = solved("solved1", TLiteral(LTChar))
-  val solved2 = solved("solved2", TLiteral(LTBool))
-  val solved3 = solved("solved3", TLiteral(LTFloat))
-  val solved4 = solved("solved4", TLiteral(LTInt))
-  val solved5 = solved("solved5", TLiteral(LTString))
+  val solved1 = CSolved("solved1", TLiteral(LTChar))
+  val solved2 = CSolved("solved2", TLiteral(LTBool))
+  val solved3 = CSolved("solved3", TLiteral(LTFloat))
+  val solved4 = CSolved("solved4", TLiteral(LTInt))
+  val solved5 = CSolved("solved5", TLiteral(LTString))
   val context = Context(Vector(solved1, solved2, solved3))
 
   def spec = suite("ContextSpec")(
