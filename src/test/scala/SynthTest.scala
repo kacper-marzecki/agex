@@ -7,6 +7,7 @@ import Expression.*
 import Type.*
 import LiteralType.*
 import Literal.*
+import ContextElement.*
 
 object SynthTest extends DefaultRunnableSpec {
   val litString = ELiteral(LString("string"))

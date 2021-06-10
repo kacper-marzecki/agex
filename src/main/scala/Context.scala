@@ -2,6 +2,7 @@ import cats.implicits.*
 import zio.*
 import ZIO.{fail, succeed}
 import AppError.*
+import ContextElement.*
 
 type AddResult[A <: ContextElement] = A match {
   case CTypedVariable => IO[ShadowedVariableName, Context]

@@ -10,6 +10,7 @@ import Literal.*
 import LiteralType.*
 import Expression.*
 import TypedExpression.*
+import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
 
