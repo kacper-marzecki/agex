@@ -9,35 +9,65 @@ import LiteralType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
+import CommonTestFunctions.runSynth
 
 object TupleTest extends DefaultRunnableSpec {
-
-  def repeat[A](xs: List[A], times: Int) =
-    List.fill(times)(xs).flatten
-
-  def runSynth(expr: Expression, context: Context = Context()) =
-    synth(expr, context)
-      // .tap(prettyPrint(_, "synthResult"))
-      .map(_._type)
-      .provideSomeLayer[ZEnv](CompilerState.live)
-  // .tapError(prettyPrint(_, "synthError"))
+  val aToTupleOfAABool = EAnnotation(
+    ELambda(
+      "a",
+      ETuple(List(EVariable("a"), EVariable("a"), ELiteral(LBool(true))))
+    ),
+    TQuantification(
+      "a",
+      TFunction(
+        TVariable("a"),
+        TTuple(List(TVariable("a"), TVariable("a"), TLiteral(LTBool)))
+      )
+    )
+  )
 
   def spec = suite("TupleTest")(
     testM("works for an emptyTuple type") {
-      val expr = ENewTuple(Nil)
+      val expr = ETuple(Nil)
       assertM(runSynth(expr))(
-        equalTo(TNewProduct(Nil))
+        equalTo(TTuple(Nil))
       )
     },
     testM("works for a long tuple") {
       val expr =
-        ENewTuple(repeat(List(litInt, litBool, litString), 100))
+        ETuple(repeat(List(litInt, litBool, litString), 100))
       assertM(runSynth(expr))(
         equalTo(
-          TNewProduct(
+          TTuple(
             repeat(
               List(TLiteral(LTInt), TLiteral(LTBool), TLiteral(LTString)),
               100
+            )
+          )
+        )
+      )
+    },
+    testM("generic tuple type ") {
+      val exp = ELet(
+        "function",
+        aToTupleOfAABool,
+        ETuple(
+          List(
+            EApplication(EVariable("function"), ELiteral(LInt(1))),
+            EApplication(EVariable("function"), ELiteral(LString("1")))
+          )
+        )
+      )
+      assertM(runSynth(exp))(
+        equalTo(
+          TTuple(
+            List(
+              TTuple(
+                List(TLiteral(LTInt), TLiteral(LTInt), TLiteral(LTBool))
+              ),
+              TTuple(
+                List(TLiteral(LTString), TLiteral(LTString), TLiteral(LTBool))
+              )
             )
           )
         )

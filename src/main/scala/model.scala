@@ -36,11 +36,6 @@ object TypedExpression {
       override val _type: Type
   ) extends TypedExpression(_type)
   case class TETuple(
-      one: TypedExpression,
-      two: TypedExpression,
-      override val _type: Type
-  ) extends TypedExpression(_type)
-  case class TENewTuple(
       values: List[TypedExpression],
       override val _type: Type
   ) extends TypedExpression(_type)
@@ -56,8 +51,7 @@ object Expression {
       extends Expression
   case class EAnnotation(expr: Expression, annotatedType: Type)
       extends Expression
-  case class ETuple(one: Expression, two: Expression) extends Expression
-  case class ENewTuple(values: List[Expression]) extends Expression
+  case class ETuple(values: List[Expression]) extends Expression
 }
 
 sealed trait Type {
@@ -74,8 +68,7 @@ object Type {
   case class TExistential(name: String) extends Type
   case class TQuantification(name: String, _type: Type) extends Type
   case class TFunction(arg: Type, ret: Type) extends Type
-  case class TProduct(one: Type, two: Type) extends Type
-  case class TNewProduct(valueTypes: List[Type]) extends Type
+  case class TTuple(valueTypes: List[Type]) extends Type
 }
 
 sealed trait LiteralType

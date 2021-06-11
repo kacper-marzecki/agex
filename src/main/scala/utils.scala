@@ -16,3 +16,6 @@ def prettyShow(it: Any): String =
 
 def prettyPrint(it: Any, tag: String): URIO[Console, Unit] =
   putStrLn(s"$tag: ${prettyShow(it)}").orDie
+
+def repeat[A](xs: List[A], times: Int) =
+  List.fill(times)(xs).flatten

@@ -13,5 +13,15 @@ object TestCommonExpressions {
     idFunction,
     TQuantification("a", TFunction(TVariable("a"), TVariable("a")))
   )
-  val strBoolTuple = ENewTuple(List(litString, litBool))
+  val strBoolTuple = ETuple(List(litString, litBool))
+}
+
+object CommonTestFunctions {
+  def runSynth(expr: Expression, context: Context = Context()) =
+    synth(expr, context)
+      // .tap(prettyPrint(_, "synthResult"))
+      .map(_._type)
+      .provideSomeLayer[zio.ZEnv](CompilerState.live)
+  // .tapError(prettyPrint(_, "synthError"))
+
 }
