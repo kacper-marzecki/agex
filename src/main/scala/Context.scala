@@ -3,6 +3,7 @@ import zio.*
 import ZIO.{fail, succeed}
 import AppError.*
 import ContextElement.*
+import Type.*
 
 type AddResult[A <: ContextElement] = A match {
   case CTypedVariable => IO[ShadowedVariableName, Context]
@@ -91,4 +92,41 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
         Some(_type)
       case _ => None
     }.headOption
+}
+
+/// Fig 7
+def isWellFormed(context: Context, _type: Type): Boolean = {
+  _type match {
+    case _: TLiteral     => true
+    case TVariable(name) => context.hasVariable(name)
+    case TFunction(arg, ret) =>
+      isWellFormed(context, arg) && isWellFormed(context, ret)
+    case TQuantification(alpha, a) =>
+      isWellFormed(context.add(CVariable(alpha)), a)
+    case TExistential(name) =>
+      context.hasExistential(name) || context.getSolved(name).isDefined
+    case TTuple(valueTypes) =>
+      valueTypes.forall(isWellFormed(context, _))
+  }
+}
+
+// Fig 8
+def applyContext(_type: Type, context: Context): Type = {
+  _type match {
+    case TLiteral(_)  => _type
+    case TVariable(_) => _type
+    case TExistential(name) => {
+      context.getSolved(name).fold(_type)(applyContext(_, context))
+    }
+    case TFunction(argType, returnType) =>
+      TFunction(
+        applyContext(argType, context),
+        applyContext(returnType, context)
+      )
+    case TQuantification(name, quantType) => {
+      TQuantification(name, applyContext(quantType, context))
+    }
+    case TTuple(valueTypes) =>
+      TTuple(valueTypes.map(applyContext(_, context)))
+  }
 }

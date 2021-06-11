@@ -12,6 +12,8 @@ import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
 
+case class SynthResult(typed: List[TypedExpression], context: Context)
+
 def assertLiteralChecksAgainst(
     literal: Literal,
     _type: LiteralType
@@ -24,17 +26,6 @@ def assertLiteralChecksAgainst(
     case (LBool(_), LTBool)     => ZIO.unit
     case (LUnit, LTUnit)        => ZIO.unit
     case _ => ZIO.fail(AppError.TypeNotApplicableToLiteral(_type, literal))
-  }
-}
-
-def literalSynthesizesTo(literal: Literal): LiteralType = {
-  literal match {
-    case LChar(_)   => LTChar
-    case LString(_) => LTString
-    case LInt(_)    => LTInt
-    case LFloat(_)  => LTFloat
-    case LBool(_)   => LTBool
-    case LUnit      => LTUnit
   }
 }
 
@@ -71,7 +62,6 @@ def checksAgainst(
     }
     case (ETuple(values), TTuple(valueTypes))
         if values.length == valueTypes.length => {
-      case class SynthResult(typed: List[TypedExpression], context: Context)
       for {
         // fold right to avoid appending the typedElement to the result list with O(n)
         result <- ZIO.foldRight(values.zip(valueTypes))(
@@ -102,58 +92,6 @@ def checksAgainst(
   }
 }
 
-//Fig. 11
-// returns (typed expression of the argument, return type of the function, context)
-def applicationSynthesizesTo(
-    context: Context,
-    _type: Type,
-    expr: Expression
-): Eff[(TypedExpression, Type, Context)] = {
-  _type match {
-    //alphaApp
-    case TExistential(name) => {
-      for {
-        alpha1 <- CompilerState.makeExistential
-        alpha2 <- CompilerState.makeExistential
-        gamma <- context.insertInPlace(
-          CExistential(name),
-          List(
-            CExistential(alpha2),
-            CExistential(alpha1),
-            CSolved(
-              name,
-              TFunction(
-                TExistential(alpha1),
-                TExistential(alpha2)
-              )
-            )
-          )
-        )
-        (typedExpr, delta) <- checksAgainst(gamma, expr, TExistential(alpha1))
-      } yield (typedExpr, TExistential(alpha2), delta)
-    }
-    //ForallApp
-    case TQuantification(name, quantType) => {
-      for {
-        alpha <- CompilerState.makeExistential
-        gamma = context.add(CExistential(alpha))
-        substitutedType = substitution(
-          quantType,
-          name,
-          TExistential(alpha)
-        )
-        result <- applicationSynthesizesTo(gamma, substitutedType, expr)
-      } yield result
-    }
-    //App
-    case TFunction(arg, ret) =>
-      for {
-        (typedExpr, delta) <- checksAgainst(context, expr, arg)
-      } yield (typedExpr, ret, delta)
-    case _ => fail(CannotApplyType(_type))
-  }
-}
-
 /// a is replaced with b in all occurrences in A
 def substitution(a: Type, alpha: String, b: Type): Type = {
   a match {
@@ -174,29 +112,6 @@ def substitution(a: Type, alpha: String, b: Type): Type = {
         substitution(arg, alpha, b),
         substitution(ret, alpha, b)
       )
-  }
-}
-
-def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
-  if (cond) {
-    ZIO.unit
-  } else {
-    ZIO.fail(ifFail)
-  }
-
-/// Fig 7
-def isWellFormed(context: Context, _type: Type): Boolean = {
-  _type match {
-    case _: TLiteral     => true
-    case TVariable(name) => context.hasVariable(name)
-    case TFunction(arg, ret) =>
-      isWellFormed(context, arg) && isWellFormed(context, ret)
-    case TQuantification(alpha, a) =>
-      isWellFormed(context.add(CVariable(alpha)), a)
-    case TExistential(name) =>
-      context.hasExistential(name) || context.getSolved(name).isDefined
-    case TTuple(valueTypes) =>
-      valueTypes.forall(isWellFormed(context, _))
   }
 }
 
@@ -298,148 +213,66 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
     }
   } yield delta
 
-// Fig 10
-def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
-  for {
-    (left, right) <- context.splitAt(CExistential(alpha))
-    //InstLSolve
-    result <-
-      if (b.isMonotype && isWellFormed(left, b)) {
-        context.insertInPlace(
-          CExistential(alpha),
-          List(CSolved(alpha, b))
-        )
-      } else {
-        b match {
-          //InstLArr
-          case TFunction(arg, returnType) => {
-            for {
-              alpha1 <- CompilerState.makeExistential
-              alpha2 <- CompilerState.makeExistential
-              gamma <- context.insertInPlace(
-                CExistential(alpha),
-                List(
-                  CExistential(alpha2),
-                  CExistential(alpha1),
-                  CSolved(
-                    alpha,
-                    TFunction(TExistential(alpha1), TExistential(alpha2))
-                  )
-                )
-              )
-              theta <- instantiateR(gamma, alpha1, arg)
-              delta <- instantiateL(
-                theta,
-                alpha2,
-                applyContext(returnType, theta)
-              )
-            } yield delta
-          }
-          //InstAIIR
-          case TQuantification(beta, b) => {
-            for {
-              gamma <- instantiateL(
-                context.add(CVariable(beta)),
-                alpha,
-                b
-              )
-              delta <- gamma.drop(CVariable(beta))
-            } yield delta
-          }
-          //InstLReach
-          case TExistential(beta) => {
-            context.insertInPlace(
-              CExistential(beta),
-              List(CSolved(beta, TExistential(alpha)))
-            )
-          }
-          case _ => fail(CannotInstantiateL(context, alpha, b))
-        }
-      }
-  } yield result
+def literalSynthesizesTo(literal: Literal): LiteralType = {
+  literal match {
+    case LChar(_)   => LTChar
+    case LString(_) => LTString
+    case LInt(_)    => LTInt
+    case LFloat(_)  => LTFloat
+    case LBool(_)   => LTBool
+    case LUnit      => LTUnit
+  }
 }
 
-/// Fig 10
-def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
-  for {
-    (left, right) <- context.splitAt(CExistential(alpha))
-    result <-
-      if (a.isMonotype && isWellFormed(left, a)) {
-        //InstRSolve
-        context.insertInPlace(
-          CExistential(alpha),
-          List(CSolved(alpha, a))
-        )
-      } else {
-        a match {
-          //InstRArr
-          case TFunction(arg, ret) => {
-            for {
-              alpha1 <- CompilerState.makeExistential
-              alpha2 <- CompilerState.makeExistential
-              gamma <- context.insertInPlace(
-                CExistential(alpha),
-                List(
-                  CExistential(alpha2),
-                  CExistential(alpha1),
-                  CSolved(
-                    alpha,
-                    TFunction(
-                      TExistential(alpha1),
-                      TExistential(alpha2)
-                    )
-                  )
-                )
-              )
-              theta <- instantiateL(gamma, alpha1, arg)
-              delta <- instantiateR(theta, alpha2, applyContext(ret, theta))
-            } yield delta
-          }
-          //InstRAllL
-          case TQuantification(beta, b) => {
-            for {
-              beta1 <- CompilerState.makeExistential
-              gamma = context
-                .add(CMarker(beta1))
-                .add(CExistential(beta1))
-              theta <- instantiateR(
-                gamma,
-                alpha,
-                substitution(b, beta, TExistential(beta1))
-              )
-              delta <- theta.drop(CMarker(beta1))
-            } yield delta
-          }
-          //InstRReach
-          case TExistential(beta) => {
-            context.insertInPlace(
-              CExistential(beta),
-              List(CSolved(beta, TExistential(alpha)))
-            )
-          }
-          case _ => fail(CannotInstantiateR(context, alpha, a))
-        }
-      }
-  } yield result
-
-/// Fig 8
-def applyContext(_type: Type, context: Context): Type = {
+//Fig. 11
+// returns (typed expression of the argument, return type of the function, context)
+def applicationSynthesizesTo(
+    context: Context,
+    _type: Type,
+    expr: Expression
+): Eff[(TypedExpression, Type, Context)] = {
   _type match {
-    case TLiteral(_)  => _type
-    case TVariable(_) => _type
+    //alphaApp
     case TExistential(name) => {
-      context.getSolved(name).fold(_type)(applyContext(_, context))
+      for {
+        alpha1 <- CompilerState.makeExistential
+        alpha2 <- CompilerState.makeExistential
+        gamma <- context.insertInPlace(
+          CExistential(name),
+          List(
+            CExistential(alpha2),
+            CExistential(alpha1),
+            CSolved(
+              name,
+              TFunction(
+                TExistential(alpha1),
+                TExistential(alpha2)
+              )
+            )
+          )
+        )
+        (typedExpr, delta) <- checksAgainst(gamma, expr, TExistential(alpha1))
+      } yield (typedExpr, TExistential(alpha2), delta)
     }
-    case TFunction(argType, returnType) =>
-      TFunction(
-        applyContext(argType, context),
-        applyContext(returnType, context)
-      )
+    //ForallApp
     case TQuantification(name, quantType) => {
-      TQuantification(name, applyContext(quantType, context))
+      for {
+        alpha <- CompilerState.makeExistential
+        gamma = context.add(CExistential(alpha))
+        substitutedType = substitution(
+          quantType,
+          name,
+          TExistential(alpha)
+        )
+        result <- applicationSynthesizesTo(gamma, substitutedType, expr)
+      } yield result
     }
-    case TTuple(valueTypes) =>
-      TTuple(valueTypes.map(applyContext(_, context)))
+    //App
+    case TFunction(arg, ret) =>
+      for {
+        (typedExpr, delta) <- checksAgainst(context, expr, arg)
+      } yield (typedExpr, ret, delta)
+    case _ => fail(CannotApplyType(_type))
   }
 }
 
@@ -494,7 +327,6 @@ def synthesizesTo(
       )
     }
     case ETuple(values) => {
-      case class SynthResult(typed: List[TypedExpression], context: Context)
       for {
         // fold right to avoid appending the typedElement to the result list with O(n)
         result <-

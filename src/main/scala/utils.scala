@@ -17,3 +17,10 @@ def prettyPrint(it: Any, tag: String): URIO[Console, Unit] =
 
 def repeat[A](xs: List[A], times: Int) =
   List.fill(times)(xs).flatten
+
+def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
+  if (cond) {
+    ZIO.unit
+  } else {
+    ZIO.fail(ifFail)
+  }
