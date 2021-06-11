@@ -1,5 +1,3 @@
-import scala.deriving.*
-import scala.compiletime.{erasedValue, summonInline}
 import zio.*
 import zio.console.{putStrLn, Console, putStr}
 
