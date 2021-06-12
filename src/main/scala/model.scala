@@ -8,6 +8,46 @@ object Literal {
   case object LUnit              extends Literal
 }
 
+sealed trait Expression
+object Expression {
+  case class EVariable(name: String)                        extends Expression
+  case class ELiteral(it: Literal)                          extends Expression
+  case class ELambda(arg: String, body: Expression)         extends Expression
+  case class EApplication(fun: Expression, arg: Expression) extends Expression
+  case class ELet(name: String, value: Expression, body: Expression)
+      extends Expression
+  case class EAnnotation(expr: Expression, annotatedType: Type)
+      extends Expression
+  case class ETuple(values: List[Expression]) extends Expression
+}
+
+sealed trait LiteralType
+object LiteralType {
+  case object LTChar   extends LiteralType
+  case object LTUnit   extends LiteralType
+  case object LTString extends LiteralType
+  case object LTInt    extends LiteralType
+  case object LTFloat  extends LiteralType
+  case object LTBool   extends LiteralType
+}
+
+sealed trait Type {
+  def isMonotype: Boolean =
+    this match {
+      case _: Type.TQuantification  => false
+      case Type.TFunction(arg, ret) => arg.isMonotype && ret.isMonotype
+      case _                        => true
+    }
+}
+object Type {
+  case class TLiteral(literalType: LiteralType)         extends Type
+  case class TVariable(name: String)                    extends Type
+  case class TExistential(name: String)                 extends Type
+  case class TQuantification(name: String, _type: Type) extends Type
+  case class TFunction(arg: Type, ret: Type)            extends Type
+  case class TTuple(valueTypes: List[Type])             extends Type
+}
+
 sealed trait TypedExpression(val _type: Type)
 object TypedExpression {
   case class TEVariable(name: String, override val _type: Type)
@@ -39,46 +79,6 @@ object TypedExpression {
       values: List[TypedExpression],
       override val _type: Type
   ) extends TypedExpression(_type)
-}
-
-sealed trait Expression
-object Expression {
-  case class EVariable(name: String)                        extends Expression
-  case class ELiteral(it: Literal)                          extends Expression
-  case class ELambda(arg: String, body: Expression)         extends Expression
-  case class EApplication(fun: Expression, arg: Expression) extends Expression
-  case class ELet(name: String, value: Expression, body: Expression)
-      extends Expression
-  case class EAnnotation(expr: Expression, annotatedType: Type)
-      extends Expression
-  case class ETuple(values: List[Expression]) extends Expression
-}
-
-sealed trait Type {
-  def isMonotype: Boolean =
-    this match {
-      case _: Type.TQuantification  => false
-      case Type.TFunction(arg, ret) => arg.isMonotype && ret.isMonotype
-      case _                        => true
-    }
-}
-object Type {
-  case class TLiteral(literalType: LiteralType)         extends Type
-  case class TVariable(name: String)                    extends Type
-  case class TExistential(name: String)                 extends Type
-  case class TQuantification(name: String, _type: Type) extends Type
-  case class TFunction(arg: Type, ret: Type)            extends Type
-  case class TTuple(valueTypes: List[Type])             extends Type
-}
-
-sealed trait LiteralType
-object LiteralType {
-  case object LTChar   extends LiteralType
-  case object LTUnit   extends LiteralType
-  case object LTString extends LiteralType
-  case object LTInt    extends LiteralType
-  case object LTFloat  extends LiteralType
-  case object LTBool   extends LiteralType
 }
 
 sealed trait ContextElement(val name: String)
