@@ -5,9 +5,9 @@ import Literal.*
 import ContextElement.*
 
 object TestCommonExpressions {
-  val litInt = ELiteral(LInt(1))
-  val litBool = ELiteral(LBool(false))
-  val litString = ELiteral(LString("string"))
+  val litInt     = ELiteral(LInt(1))
+  val litBool    = ELiteral(LBool(false))
+  val litString  = ELiteral(LString("string"))
   val idFunction = ELambda("x", EVariable("x"))
   val annotatedId = EAnnotation(
     idFunction,
@@ -22,6 +22,6 @@ object CommonTestFunctions {
       // .tap(prettyPrint(_, "synthResult"))
       .map(_._type)
       .provideSomeLayer[zio.ZEnv](CompilerState.live)
-  // .tapError(prettyPrint(_, "synthError"))
+      .tapError(prettyPrint(_, "synthError"))
 
 }

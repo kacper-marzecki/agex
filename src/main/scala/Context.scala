@@ -98,6 +98,15 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
       case _                                      => None
     }.headOption
 
+  def getTypeDefinition(name: String): IO[AppError, Type] =
+    elements
+      .mapFilter {
+        case CTypeDefinition(name1, _type) if name == name1 => Some(_type)
+        case _                                              => None
+      }
+      .headOption
+      .fold(fail(TypeNotKnown(this, name)))(succeed(_))
+
   def hasExistential(name: String): Boolean =
     elements.contains(CExistential(name))
 

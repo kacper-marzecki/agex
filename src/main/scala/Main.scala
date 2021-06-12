@@ -295,6 +295,7 @@ def synthesizesTo(
         )
     }
     //Anno
+    // TODO remove in favour of ENameAnnotation, as the user will not be able to annotate with a Type
     case EAnnotation(expression, annType) => {
       if (isWellFormed(context, annType)) {
         for {
@@ -307,6 +308,24 @@ def synthesizesTo(
       } else {
         fail(TypeNotWellFormed(context, annType))
       }
+    }
+    case ENamedAnnotation(expression, typeName) => {
+      for {
+        annotatedType <- context.getTypeDefinition(typeName)
+        _ <- assertTrue(
+          isWellFormed(context, annotatedType),
+          TypeNotWellFormed(context, annotatedType)
+        )
+        (typedExpression, delta) <- checksAgainst(
+          context,
+          expression,
+          annotatedType
+        )
+        // TODO check: do we even need to return the annotation ?
+      } yield (
+        TEAnnotation(typedExpression, annotatedType, annotatedType),
+        delta
+      )
     }
     //->I=>
     case ELambda(arg, ret) => {

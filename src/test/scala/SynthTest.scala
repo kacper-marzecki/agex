@@ -1,6 +1,7 @@
 import zio.*
 import zio.console.*
 import zio.test.*
+import zio.test.assertM
 import zio.test.Assertion.*
 import zio.test.environment.*
 import Expression.*
@@ -10,6 +11,8 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.runSynth
+import scala.language.experimental
+import cats.data.NonEmptyListInstances
 
 object SynthTest extends DefaultRunnableSpec {
 
@@ -217,6 +220,33 @@ object SynthTest extends DefaultRunnableSpec {
       )
       assertM(runSynth(exp))(
         equalTo(TLiteral(LTInt))
+      )
+    },
+    testM("type-checks with named annotation") {
+      val ctx = Context(
+        Vector(CTypeDefinition("TypeName", TLiteral(LTBool)))
+      )
+      val expr = ENamedAnnotation(ELiteral(LBool(true)), "TypeName")
+      assertM(runSynth(expr, ctx))(
+        equalTo(TLiteral(LTBool))
+      )
+    },
+    testM("doesnt type-checks with named annotation if type doesnt exist") {
+      val expr = ENamedAnnotation(ELiteral(LBool(true)), "annotatedType")
+      assertM(runSynth(expr).flip)(
+        Assertion.assertion("raises correct error")() {
+          case it: AppError.TypeNotKnown if it.name == "annotatedType" => true
+          case _                                                       => false
+        }
+      )
+    },
+    testM("doesnt type-checks with named annotation if type doesnt exist") {
+      val ctx = Context(
+        Vector(CTypeDefinition("TypeName", TLiteral(LTBool)))
+      )
+      val expr = ENamedAnnotation(ELiteral(LInt(1)), "TypeName")
+      assertM(runSynth(expr, ctx).flip)(
+        equalTo(AppError.TypeNotApplicableToLiteral(LTBool, LInt(1)))
       )
     }
   )

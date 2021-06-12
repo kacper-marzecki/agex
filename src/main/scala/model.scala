@@ -18,6 +18,8 @@ object Expression {
       extends Expression
   case class EAnnotation(expr: Expression, annotatedType: Type)
       extends Expression
+  case class ENamedAnnotation(expr: Expression, annotatedType: String)
+      extends Expression
   case class ETuple(values: List[Expression]) extends Expression
 }
 
