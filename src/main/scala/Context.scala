@@ -6,15 +6,23 @@ import ContextElement.*
 import Type.*
 
 type AddResult[A <: ContextElement] = A match {
-  case CTypedVariable => IO[ShadowedVariableName, Context]
-  case ?              => Context
+  case CTypedVariable  => IO[ShadowedVariableName, Context]
+  case CTypeDefinition => IO[TypeWithNameAlreadyExists, Context]
+  case ?               => Context
 }
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
-  lazy val names = elements.mapFilter { it =>
+  lazy val typedVariableNames = elements.mapFilter { it =>
     it match {
       case _: CTypedVariable => Some(it.name)
       case _                 => None
+    }
+  }.toSet
+
+  lazy val typeDefinitions = elements.mapFilter { it =>
+    it match {
+      case _: CTypeDefinition => Some(it.name)
+      case _                  => None
     }
   }.toSet
 
@@ -29,15 +37,26 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def add[A <: ContextElement](element: A): AddResult[A] = {
     element match {
       case _: CTypedVariable =>
-        if (names.contains(element.name)) {
+        if (typedVariableNames.contains(element.name)) {
           fail(
             ShadowedVariableName(this, element.name)
           )
             .asInstanceOf[AddResult[A]]
         } else {
-          succeed(this.copy(elements = elements.appended(element)))
+          succeed(Context(elements = elements.appended(element)))
             .asInstanceOf[AddResult[A]]
         }
+      case it: CTypeDefinition =>
+        if (typeDefinitions.contains(it.name)) {
+          fail(
+            TypeWithNameAlreadyExists(this, it.name, it._type)
+          )
+            .asInstanceOf[AddResult[A]]
+        } else {
+          succeed(Context(elements = elements.appended(element)))
+            .asInstanceOf[AddResult[A]]
+        }
+
       case _ =>
         this
           .copy(elements = elements.appended(element))

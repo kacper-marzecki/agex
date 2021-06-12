@@ -1,2 +1,7 @@
 - revisit instantiateL and instantiateR algo
 - product type with field labels ? 
+
+
+adding type aliases:
+- OK, we have a way to store a type in the context under some name
+- NEED: way to annotate a expression with a name that references a type in the context 

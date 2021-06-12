@@ -13,6 +13,7 @@ enum AppError extends RuntimeException {
   case CannotInstantiateR(context: Context, name: String, _type: Type)
   case CannotInstantiateL(context: Context, name: String, _type: Type)
   case ShadowedVariableName(context: Context, name: String)
+  case TypeWithNameAlreadyExists(context: Context, name: String, _type: Type)
 }
 
 type Env = ZEnv & Has[CompilerState]

@@ -91,4 +91,6 @@ object ContextElement {
   case class CTypedVariable(override val name: String, _type: Type)
       extends ContextElement(name)
   case class CMarker(override val name: String) extends ContextElement(name)
+  case class CTypeDefinition(override val name: String, _type: Type)
+      extends ContextElement(name)
 }
