@@ -21,6 +21,11 @@ object Expression {
   case class ENamedAnnotation(expr: Expression, annotatedType: String)
       extends Expression
   case class ETuple(values: List[Expression]) extends Expression
+  case class ETypeAlias(
+      newName: String,
+      targetTypeName: String,
+      expr: Expression
+  ) extends Expression
 }
 
 sealed trait LiteralType
@@ -48,6 +53,7 @@ object Type {
   case class TQuantification(name: String, _type: Type) extends Type
   case class TFunction(arg: Type, ret: Type)            extends Type
   case class TTuple(valueTypes: List[Type])             extends Type
+  case class TTypeRef(targetType: String)               extends Type
 }
 
 sealed trait TypedExpression(val _type: Type)

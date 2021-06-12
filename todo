@@ -1,6 +1,6 @@
 - revisit instantiateL and instantiateR algo
 - product type with field labels ? 
-
+- remove 'case _ =>' matches
 
 adding type aliases:
 - OK, we have a way to store a type in the context under some name

@@ -221,33 +221,70 @@ object SynthTest extends DefaultRunnableSpec {
       assertM(runSynth(exp))(
         equalTo(TLiteral(LTInt))
       )
-    },
-    testM("type-checks with named annotation") {
-      val ctx = Context(
-        Vector(CTypeDefinition("TypeName", TLiteral(LTBool)))
-      )
-      val expr = ENamedAnnotation(ELiteral(LBool(true)), "TypeName")
-      assertM(runSynth(expr, ctx))(
-        equalTo(TLiteral(LTBool))
-      )
-    },
-    testM("doesnt type-checks with named annotation if type doesnt exist") {
-      val expr = ENamedAnnotation(ELiteral(LBool(true)), "annotatedType")
-      assertM(runSynth(expr).flip)(
-        Assertion.assertion("raises correct error")() {
-          case it: AppError.TypeNotKnown if it.name == "annotatedType" => true
-          case _                                                       => false
-        }
-      )
-    },
-    testM("doesnt type-checks with named annotation if type doesnt exist") {
-      val ctx = Context(
-        Vector(CTypeDefinition("TypeName", TLiteral(LTBool)))
-      )
-      val expr = ENamedAnnotation(ELiteral(LInt(1)), "TypeName")
-      assertM(runSynth(expr, ctx).flip)(
-        equalTo(AppError.TypeNotApplicableToLiteral(LTBool, LInt(1)))
-      )
     }
+    // testM("type-checks with named annotation") {
+    //   val ctx = Context(
+    //     Vector(CTypeDefinition("Boolean", TLiteral(LTBool)))
+    //   )
+    //   val expr = ENamedAnnotation(ELiteral(LBool(true)), "Boolean")
+    //   assertM(runSynth(expr, ctx))(
+    //     equalTo(TLiteral(LTBool))
+    //   )
+    // },
+    // testM("doesnt type-checks with named annotation if type doesnt exist") {
+    //   val expr = ENamedAnnotation(ELiteral(LBool(true)), "annotatedType")
+    //   assertM(runSynth(expr).flip)(
+    //     Assertion.assertion("raises correct error")() {
+    //       case it: AppError.TypeNotKnown if it.name == "annotatedType" => true
+    //       case _                                                       => false
+    //     }
+    //   )
+    // },
+    // testM("doesnt type-checks with named annotation if type doesnt exist") {
+    //   val ctx = Context(
+    //     Vector(CTypeDefinition("Boolean", TLiteral(LTBool)))
+    //   )
+    //   val expr = ENamedAnnotation(ELiteral(LInt(1)), "Boolean")
+    //   assertM(runSynth(expr, ctx).flip)(
+    //     equalTo(AppError.TypeNotApplicableToLiteral(LTBool, LInt(1)))
+    //   )
+    // },
+    // testM("uses type alias in type annotations") {
+    //   // the following code is roughly represented in this test:
+    //   // type asd = Integer
+    //   // type kek = asd -> asd -> asd
+    //   // let plus: kek = a => b => a + b
+    //   // plus(1)(2)
+    //   val kek = ETypeAlias("kek")
+    //   val plusFunction = ENamedAnnotation(
+    //     ELambda("a", ELambda("b", ELiteral(LInt(1)))),
+    //     "kek"
+    //   )
+    //   val expr = ELet(
+    //     "plus",
+    //     plusFunction,
+    //     ELet(
+    //       "plus1",
+    //       EApplication(EVariable("plus"), ELiteral(LInt(1))),
+    //       ELet(
+    //         "apply",
+    //         ELambda(
+    //           "function",
+    //           ELambda(
+    //             "arg",
+    //             EApplication(EVariable("function"), EVariable("arg"))
+    //           )
+    //         ),
+    //         EApplication(
+    //           EApplication(EVariable("apply"), EVariable("plus1")),
+    //           ELiteral(LInt(1))
+    //         )
+    //       )
+    //     )
+    //   )
+    //   assertM(runSynth(expr))(
+    //     equalTo(TLiteral(LTInt))
+    //   )
+    // }
   )
 }

@@ -296,6 +296,7 @@ def synthesizesTo(
     }
     //Anno
     // TODO remove in favour of ENameAnnotation, as the user will not be able to annotate with a Type
+    // ^ disregard , maybe we should add a Type that is a TypeRef(targetType: String), and the lookup would be done in the context
     case EAnnotation(expression, annType) => {
       if (isWellFormed(context, annType)) {
         for {
@@ -309,23 +310,32 @@ def synthesizesTo(
         fail(TypeNotWellFormed(context, annType))
       }
     }
-    case ENamedAnnotation(expression, typeName) => {
+    // case ENamedAnnotation(expression, typeName) => {
+    //   for {
+    //     annotatedType <- context.getTypeDefinition(typeName)
+    //     _ <- assertTrue(
+    //       isWellFormed(context, annotatedType),
+    //       TypeNotWellFormed(context, annotatedType)
+    //     )
+    //     (typedExpression, delta) <- checksAgainst(
+    //       context,
+    //       expression,
+    //       annotatedType
+    //     )
+    //     // TODO check: do we even need to return the annotation ?
+    //   } yield (
+    //     TEAnnotation(typedExpression, annotatedType, annotatedType),
+    //     delta
+    //   )
+    // }
+    case ETypeAlias(newName, targetTypeName, expr) => {
       for {
-        annotatedType <- context.getTypeDefinition(typeName)
-        _ <- assertTrue(
-          isWellFormed(context, annotatedType),
-          TypeNotWellFormed(context, annotatedType)
-        )
-        (typedExpression, delta) <- checksAgainst(
-          context,
-          expression,
-          annotatedType
-        )
-        // TODO check: do we even need to return the annotation ?
-      } yield (
-        TEAnnotation(typedExpression, annotatedType, annotatedType),
-        delta
-      )
+        targetType         <- context.getTypeDefinition(targetTypeName)
+        theta              <- context.add(CTypeDefinition(newName, targetType))
+        (typedExpr, gamma) <- synthesizesTo(theta, expr)
+        // may need gamma.insertInPlace(CTypeDefinition(newName, targetType), List())
+        delta <- gamma.drop(CTypeDefinition(newName, targetType))
+      } yield (typedExpr, delta)
     }
     //->I=>
     case ELambda(arg, ret) => {

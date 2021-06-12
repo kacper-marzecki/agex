@@ -135,6 +135,8 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
       context.hasExistential(name) || context.getSolved(name).isDefined
     case TTuple(valueTypes) =>
       valueTypes.forall(isWellFormed(context, _))
+    case TTypeRef(targetType) =>
+      context.has
   }
 }
 
