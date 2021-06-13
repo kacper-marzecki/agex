@@ -125,6 +125,12 @@ def substitution(
       context
         .getTypeDefinition(name)
         .flatMap(substitution(context, _, alpha, b))
+    case TStruct(fieldTypes) =>
+      ZIO
+        .foreach(fieldTypes) { case (k, v) =>
+          substitution(context, v, alpha, b).map((k, _))
+        }
+        .map(TStruct.apply)
   }
 }
 
@@ -151,31 +157,34 @@ def occursIn(
       anyM(valueTypes, occursIn(context, alpha, _))
     case TTypeRef(name) =>
       context.getTypeDefinition(name).flatMap(occursIn(context, alpha, _))
+    case TStruct(fieldTypes) =>
+      anyM(fieldTypes.values, occursIn(context, alpha, _))
   }
 }
 
+// Ψ ⊢ A ≤ B Under context Ψ, type A is a subtype of B
 def subtype(context: Context, a: Type, b: Type): Eff[Context] =
   for {
     _ <- assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a))
     _ <- assertTrue(isWellFormed(context, b), TypeNotWellFormed(context, b))
     delta <- (a, b) match {
-      //<:Unit
+      //≤Unit
       case (TLiteral(literalA), TLiteral(literalB)) => {
         assertTrue(literalA == literalB, TypesNotEqual(a, b))
           .as(context)
       }
-      //<:Var
+      //≤Var
       case (TVariable(nameA), TVariable(nameB)) => {
         assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a)) *>
           assertTrue(nameA == nameB, TypeNamesNotEqual(nameA, nameB))
             .as(context)
       }
-      //<:Exvar
+      //≤Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
         assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a))
           .as(context)
       }
-      //<:->
+      //≤->
       case (TFunction(arg1, ret1), TFunction(arg2, ret2)) => {
         for {
           theta <- subtype(context, arg1, arg2)
@@ -186,12 +195,17 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           delta <- subtype(theta, a, b)
         } yield delta
       }
-      case (TTuple(typesA), TTuple(typesB)) => {
+      // TODO: instead of failing to match, we could fail with an informative message
+      case (TTuple(typesA), TTuple(typesB)) if (typesA.size == typesB.size) => {
         ZIO.foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
           subtype(delta, a, b)
         }
       }
-      //<:forallL
+      case (TStruct(fieldsA), TStruct(typesB)) => {
+        // TODO: need to accumulate the built context, as the nested context might contain new variables
+        ZIO.foreach_ ???
+      }
+      //≤∀L
       case (TQuantification(name, quantType), _) => {
         for {
           alpha <- CompilerState.makeExistential
@@ -208,13 +222,13 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           result <- delta.drop(CMarker(alpha))
         } yield result
       }
-      //<:forallR
+      //≤∀R
       case (_, TQuantification(name, quantType)) => {
         val theta = context.add(CVariable(name))
         subtype(theta, a, quantType)
           .flatMap(_.drop(CVariable(name)))
       }
-      //<:InstatiateL
+      //≤InstatiateL
       case (TExistential(name), _) => {
         assertNotM(
           occursIn(context, name, b),
@@ -222,7 +236,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateL(context, name, b)
       }
-      //<:InstantiateR
+      //≤InstantiateR
       case (_, TExistential(name)) => {
         assertNotM(
           occursIn(context, name, a),
@@ -371,6 +385,24 @@ def synthesizesTo(
         tupleType = TTuple(result.typed.map(_._type))
       } yield (TETuple(result.typed, tupleType), result.context)
     }
+    case EStruct(fields) => {
+      for {
+        // fold right to avoid appending the typedElement to the result list with O(n)
+        // TODO abstract this aggregation of a Eff[(TypedExpression, Context)] into a separate function
+        result <-
+          ZIO.foldRight(fields.values)(SynthResult(Nil, context)) {
+            (elem, result) =>
+              for {
+                (elemTyped, gamma) <- synthesizesTo(result.context, elem)
+              } yield SynthResult(elemTyped :: result.typed, gamma)
+          }
+        typedFields = fields.keys.zip(result.typed).toMap
+        fieldTypes = typedFields.map { case (fieldName, typedField) =>
+          (fieldName, typedField._type)
+        }.toMap
+        // tupleType = TTuple(result.typed.map(_._type))
+      } yield (TEStruct(typedFields, TStruct(fieldTypes)), result.context)
+    }
     case ELet(name, expr, body) => {
       for {
         (exprTyped, gamma) <- synthesizesTo(context, expr)
@@ -404,7 +436,6 @@ def synth(
     (typedExpression, resultContext) <- synthesizesTo(context, expr)
     resultType <- applyContext(typedExpression._type, resultContext)
     result = typedExpression.modify(_._type).setTo(resultType)
-    // _ <- prettyPrint(resultContext)
   } yield (resultContext, result)
 }
 
