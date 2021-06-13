@@ -5,4 +5,14 @@
         - How to construct a anonymous product type (maybe something akin to a record)
         - How to construct a named type 
         - How would we handle structural and nominal typing 
+            - proposition: 
+            ```elixir
+                defmodule User do
+                    defstruct name: "John", age: 27
+                end
+                a = %User{}
+                [:__struct__, :age, :name] = Map.keys a 
+             ```
+             Nominal types could be implemented using the special :__struct__ tag in a structural type
+
 - remove 'case _ =>' matches
