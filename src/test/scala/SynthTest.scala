@@ -1,6 +1,7 @@
 import zio.*
 import zio.console.*
 import zio.test.*
+import zio.test.assertM
 import zio.test.Assertion.*
 import zio.test.environment.*
 import Expression.*
@@ -10,6 +11,8 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.runSynth
+import scala.language.experimental
+import cats.data.NonEmptyListInstances
 
 object SynthTest extends DefaultRunnableSpec {
 
@@ -217,6 +220,62 @@ object SynthTest extends DefaultRunnableSpec {
       )
       assertM(runSynth(exp))(
         equalTo(TLiteral(LTInt))
+      )
+    },
+    testM("type-checks with named annotation") {
+      val ctx = Context(
+        Vector(CTypeDefinition("Boolean", TLiteral(LTBool)))
+      )
+      val expr = EAnnotation(ELiteral(LBool(true)), TTypeRef("Boolean"))
+      assertM(runSynth(expr, ctx))(
+        equalTo(TLiteral(LTBool))
+      )
+    },
+    testM("doesnt type-check with named annotation if type doesnt exist") {
+      val expr = EAnnotation(ELiteral(LBool(true)), TTypeRef("annotatedType"))
+      assertM(runSynth(expr).flip)(
+        // TODO: should fail with AppError.TypeNotKnown
+        Assertion.assertion("raises correct error")() {
+          case it: AppError.TypeNotWellFormed
+              if it._type == TTypeRef("annotatedType") =>
+            true
+          case _ => false
+        }
+      )
+    },
+    testM("doesnt type-check with a wrong annotation") {
+      val ctx = Context(
+        Vector(CTypeDefinition("Boolean", TLiteral(LTBool)))
+      )
+      val expr = EAnnotation(ELiteral(LInt(1)), TTypeRef("Boolean"))
+      assertM(runSynth(expr, ctx).flip)(
+        equalTo(AppError.TypeNotApplicableToLiteral(LTBool, LInt(1)))
+      )
+    },
+    testM("uses type alias in type annotations") {
+      // the following code is roughly represented in this test:
+      // type asd = Integer
+      // type kek = asd -> Boolean
+      // let fun: kek = a => false
+      // fun(1)
+      val ctx = Context(
+        Vector(CTypeDefinition("Integer", TLiteral(LTInt)))
+      )
+      val expr = ETypeAlias(
+        "asd",
+        TTypeRef("Integer"),
+        ETypeAlias(
+          "kek",
+          TFunction(TTypeRef("asd"), TLiteral(LTBool)),
+          ELet(
+            "fun",
+            EAnnotation(ELambda("a", ELiteral(LBool(false))), TTypeRef("kek")),
+            EApplication(EVariable("fun"), ELiteral(LInt(1)))
+          )
+        )
+      )
+      assertM(runSynth(expr, ctx))(
+        equalTo(TLiteral(LTBool))
       )
     }
   )

@@ -19,6 +19,11 @@ object Expression {
   case class EAnnotation(expr: Expression, annotatedType: Type)
       extends Expression
   case class ETuple(values: List[Expression]) extends Expression
+  case class ETypeAlias(
+      newName: String,
+      targetType: Type,
+      expr: Expression
+  ) extends Expression
 }
 
 sealed trait LiteralType
@@ -46,6 +51,7 @@ object Type {
   case class TQuantification(name: String, _type: Type) extends Type
   case class TFunction(arg: Type, ret: Type)            extends Type
   case class TTuple(valueTypes: List[Type])             extends Type
+  case class TTypeRef(targetType: String)               extends Type
 }
 
 sealed trait TypedExpression(val _type: Type)
@@ -79,6 +85,12 @@ object TypedExpression {
       values: List[TypedExpression],
       override val _type: Type
   ) extends TypedExpression(_type)
+  case class TETypeAlias(
+      newName: String,
+      targetType: Type,
+      expr: TypedExpression,
+      override val _type: Type
+  ) extends TypedExpression(_type)
 }
 
 sealed trait ContextElement(val name: String)
@@ -91,4 +103,6 @@ object ContextElement {
   case class CTypedVariable(override val name: String, _type: Type)
       extends ContextElement(name)
   case class CMarker(override val name: String) extends ContextElement(name)
+  case class CTypeDefinition(override val name: String, _type: Type)
+      extends ContextElement(name)
 }

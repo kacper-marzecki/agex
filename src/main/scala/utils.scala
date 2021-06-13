@@ -24,3 +24,27 @@ def assertTrue[E](cond: Boolean, ifFail: => E): IO[E, Unit] =
   } else {
     ZIO.fail(ifFail)
   }
+
+def assertM[R, E](check: ZIO[R, E, Boolean], failure: => E) = {
+  ZIO.ifM(check)(
+    ZIO.unit,
+    ZIO.fail(failure)
+  )
+}
+
+def assertNotM[R, E](check: ZIO[R, E, Boolean], failure: => E) = {
+  ZIO.ifM(check)(
+    ZIO.fail(failure),
+    ZIO.unit
+  )
+}
+
+// Checks if any element of the collection satisfies the given effectful predicate
+def anyM[R, E, A](
+    collection: Iterable[A],
+    test: A => ZIO[R, E, Boolean]
+): ZIO[R, E, Boolean] =
+  ZIO.foldLeft(collection)(false)((res, elem) =>
+    if (res) ZIO.succeed(res)
+    else test(elem)
+  )
