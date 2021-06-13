@@ -18,12 +18,10 @@ object Expression {
       extends Expression
   case class EAnnotation(expr: Expression, annotatedType: Type)
       extends Expression
-  case class ENamedAnnotation(expr: Expression, annotatedType: String)
-      extends Expression
   case class ETuple(values: List[Expression]) extends Expression
   case class ETypeAlias(
       newName: String,
-      targetTypeName: String,
+      targetType: Type,
       expr: Expression
   ) extends Expression
 }
@@ -85,6 +83,12 @@ object TypedExpression {
   ) extends TypedExpression(_type)
   case class TETuple(
       values: List[TypedExpression],
+      override val _type: Type
+  ) extends TypedExpression(_type)
+  case class TETypeAlias(
+      newName: String,
+      targetType: Type,
+      expr: TypedExpression,
       override val _type: Type
   ) extends TypedExpression(_type)
 }

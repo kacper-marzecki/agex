@@ -78,59 +78,79 @@ def checksAgainst(
         resultType = TTuple(result.typed.map(_._type))
       } yield (TETuple(result.typed, resultType), result.context)
     }
+    case (_, TTypeRef(name)) =>
+      context.getTypeDefinition(name).flatMap(checksAgainst(context, expr, _))
     //DeclSub
     case _ => {
       for {
         (typed, theta) <- synthesizesTo(context, expr)
-        result <- subtype(
-          theta,
+        (a, b) <- ZIO.tupled(
           applyContext(typed._type, theta),
           applyContext(_type, theta)
         )
+        result <- subtype(theta, a, b)
       } yield (typed, result)
     }
   }
 }
 
 /// a is replaced with b in all occurrences in A
-def substitution(a: Type, alpha: String, b: Type): Type = {
+def substitution(
+    context: Context,
+    a: Type,
+    alpha: String,
+    b: Type
+): IO[AppError, Type] = {
   a match {
-    case _: TLiteral     => a
-    case TVariable(name) => if (name == alpha) b else a
+    case _: TLiteral     => succeed(a)
+    case TVariable(name) => if (name == alpha) succeed(b) else succeed(a)
     case TQuantification(name, quantType) => {
       if (name == alpha) {
-        TQuantification(name, b)
+        succeed(TQuantification(name, b))
       } else {
-        TQuantification(name, substitution(quantType, alpha, b))
+        substitution(context, quantType, alpha, b).map(TQuantification(name, _))
       }
     }
-    case TExistential(name) => if (name == alpha) b else a
+    case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
-      TTuple(valueTypes.map(substitution(_, alpha, b)))
+      ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
     case TFunction(arg, ret) =>
-      TFunction(
-        substitution(arg, alpha, b),
-        substitution(ret, alpha, b)
-      )
+      for {
+        (argType, retType) <- ZIO.tupled(
+          substitution(context, arg, alpha, b),
+          substitution(context, ret, alpha, b)
+        )
+      } yield TFunction(argType, retType)
+    case TTypeRef(name) =>
+      context
+        .getTypeDefinition(name)
+        .flatMap(substitution(context, _, alpha, b))
   }
 }
 
 // Fig 9: α^ !∈ FV(B)
-def occursIn(alpha: String, a: Type): Boolean = {
+def occursIn(
+    context: Context,
+    alpha: String,
+    a: Type
+): IO[AppError, Boolean] = {
   a match {
-    case TLiteral(_)     => false
-    case TVariable(name) => alpha == name
+    case TLiteral(_)     => succeed(false)
+    case TVariable(name) => succeed(alpha == name)
     case TFunction(arg, ret) =>
-      occursIn(alpha, arg) || occursIn(alpha, ret)
+      anyM(List(arg, ret), occursIn(context, alpha, _))
     case TQuantification(beta, t) => {
       if (alpha == beta) {
-        return true;
+        return succeed(true);
       } else {
-        return occursIn(alpha, t);
+        return occursIn(context, alpha, t);
       }
     }
-    case TExistential(name) => alpha == name
-    case TTuple(valueTypes) => valueTypes.exists(occursIn(alpha, _))
+    case TExistential(name) => succeed(alpha == name)
+    case TTuple(valueTypes) =>
+      anyM(valueTypes, occursIn(context, alpha, _))
+    case TTypeRef(name) =>
+      context.getTypeDefinition(name).flatMap(occursIn(context, alpha, _))
   }
 }
 
@@ -159,11 +179,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (TFunction(arg1, ret1), TFunction(arg2, ret2)) => {
         for {
           theta <- subtype(context, arg1, arg2)
-          delta <- subtype(
-            theta,
+          (a, b) <- ZIO.tupled(
             applyContext(ret1, theta),
             applyContext(ret2, theta)
           )
+          delta <- subtype(theta, a, b)
         } yield delta
       }
       case (TTuple(typesA), TTuple(typesB)) => {
@@ -178,7 +198,8 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           gamma = context
             .add(CMarker(alpha))
             .add(CExistential(alpha))
-          substitutedQuantType = substitution(
+          substitutedQuantType <- substitution(
+            context,
             quantType,
             name,
             TExistential(alpha)
@@ -195,19 +216,19 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //<:InstatiateL
       case (TExistential(name), _) => {
-        if (!occursIn(name, b)) {
+        assertNotM(
+          occursIn(context, name, b),
+          CircularInstantiation(context, name, b)
+        ) *>
           instantiateL(context, name, b)
-        } else {
-          fail(CircularInstantiation(context, name, b))
-        }
       }
       //<:InstantiateR
       case (_, TExistential(name)) => {
-        if (!occursIn(name, a)) {
+        assertNotM(
+          occursIn(context, name, a),
+          CircularInstantiation(context, name, a)
+        ) *>
           instantiateR(context, name, a)
-        } else {
-          fail(CircularInstantiation(context, name, a))
-        }
       }
       case _ => fail(CannotSubtype(context, a, b))
     }
@@ -259,7 +280,8 @@ def applicationSynthesizesTo(
       for {
         alpha <- CompilerState.makeExistential
         gamma = context.add(CExistential(alpha))
-        substitutedType = substitution(
+        substitutedType <- substitution(
+          context,
           quantType,
           name,
           TExistential(alpha)
@@ -295,8 +317,6 @@ def synthesizesTo(
         )
     }
     //Anno
-    // TODO remove in favour of ENameAnnotation, as the user will not be able to annotate with a Type
-    // ^ disregard , maybe we should add a Type that is a TypeRef(targetType: String), and the lookup would be done in the context
     case EAnnotation(expression, annType) => {
       if (isWellFormed(context, annType)) {
         for {
@@ -310,32 +330,16 @@ def synthesizesTo(
         fail(TypeNotWellFormed(context, annType))
       }
     }
-    // case ENamedAnnotation(expression, typeName) => {
-    //   for {
-    //     annotatedType <- context.getTypeDefinition(typeName)
-    //     _ <- assertTrue(
-    //       isWellFormed(context, annotatedType),
-    //       TypeNotWellFormed(context, annotatedType)
-    //     )
-    //     (typedExpression, delta) <- checksAgainst(
-    //       context,
-    //       expression,
-    //       annotatedType
-    //     )
-    //     // TODO check: do we even need to return the annotation ?
-    //   } yield (
-    //     TEAnnotation(typedExpression, annotatedType, annotatedType),
-    //     delta
-    //   )
-    // }
-    case ETypeAlias(newName, targetTypeName, expr) => {
+    case ETypeAlias(newName, targetType, expr) => {
       for {
-        targetType         <- context.getTypeDefinition(targetTypeName)
         theta              <- context.add(CTypeDefinition(newName, targetType))
         (typedExpr, gamma) <- synthesizesTo(theta, expr)
-        // may need gamma.insertInPlace(CTypeDefinition(newName, targetType), List())
+        // potential pain point: may need gamma.insertInPlace(CTypeDefinition(newName, targetType), List())
         delta <- gamma.drop(CTypeDefinition(newName, targetType))
-      } yield (typedExpr, delta)
+      } yield (
+        TETypeAlias(newName, targetType, typedExpr, typedExpr._type),
+        delta
+      )
     }
     //->I=>
     case ELambda(arg, ret) => {
@@ -380,10 +384,11 @@ def synthesizesTo(
     case EApplication(fun, arg) => {
       for {
         (funTyped, theta) <- synthesizesTo(context, fun)
+        appliedFunType    <- applyContext(funTyped._type, theta)
         (argTyped, applicationType, delta) <-
           applicationSynthesizesTo(
             theta,
-            applyContext(funTyped._type, theta),
+            appliedFunType,
             arg
           )
       } yield (TEApplication(funTyped, argTyped, applicationType), delta)
@@ -394,13 +399,13 @@ def synthesizesTo(
 def synth(
     expr: Expression,
     context: Context = Context()
-): Eff[TypedExpression] = {
+): Eff[(Context, TypedExpression)] = {
   for {
     (typedExpression, resultContext) <- synthesizesTo(context, expr)
-    resultType = applyContext(typedExpression._type, resultContext)
-    result     = typedExpression.modify(_._type).setTo(resultType)
+    resultType <- applyContext(typedExpression._type, resultContext)
+    result = typedExpression.modify(_._type).setTo(resultType)
     // _ <- prettyPrint(resultContext)
-  } yield result
+  } yield (resultContext, result)
 }
 
 object App extends zio.App {

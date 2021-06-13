@@ -4,6 +4,7 @@ import ZIO.{fail, succeed}
 import AppError.*
 import ContextElement.*
 import Type.*
+import cats.syntax.apply
 
 type AddResult[A <: ContextElement] = A match {
   case CTypedVariable  => IO[ShadowedVariableName, Context]
@@ -110,6 +111,9 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def hasExistential(name: String): Boolean =
     elements.contains(CExistential(name))
 
+  def hasTypeDefinition(name: String): Boolean =
+    typeDefinitions.contains(name)
+
   // only for quantifiations
   def hasVariable(name: String): Boolean =
     elements.contains(CVariable(name))
@@ -123,6 +127,7 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
 }
 
 /// Fig 7
+// should probably be an assertion IO[Reason, Unit]
 def isWellFormed(context: Context, _type: Type): Boolean = {
   _type match {
     case _: TLiteral     => true
@@ -136,27 +141,31 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
     case TTuple(valueTypes) =>
       valueTypes.forall(isWellFormed(context, _))
     case TTypeRef(targetType) =>
-      context.has
+      context.hasTypeDefinition(targetType)
   }
 }
 
 // Fig 8
-def applyContext(_type: Type, context: Context): Type = {
+def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
   _type match {
-    case TLiteral(_)  => _type
-    case TVariable(_) => _type
+    case TLiteral(_)  => succeed(_type)
+    case TVariable(_) => succeed(_type)
     case TExistential(name) => {
-      context.getSolved(name).fold(_type)(applyContext(_, context))
+      context.getSolved(name).fold(succeed(_type))(applyContext(_, context))
     }
     case TFunction(argType, returnType) =>
-      TFunction(
-        applyContext(argType, context),
-        applyContext(returnType, context)
-      )
+      for {
+        arg  <- applyContext(argType, context)
+        body <- applyContext(returnType, context)
+      } yield TFunction(arg, body)
     case TQuantification(name, quantType) => {
-      TQuantification(name, applyContext(quantType, context))
+      applyContext(quantType, context).map(TQuantification(name, _))
     }
     case TTuple(valueTypes) =>
-      TTuple(valueTypes.map(applyContext(_, context)))
+      ZIO.foreach(valueTypes)(applyContext(_, context)).map(TTuple(_))
+    case TTypeRef(name) =>
+      context
+        .getTypeDefinition(name)
+        .flatMap(applyContext(_, context))
   }
 }

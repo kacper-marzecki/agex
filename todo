@@ -1,7 +1,8 @@
 - revisit instantiateL and instantiateR algo
-- product type with field labels ? 
+- product types:
+    - think out: 
+        - Product type literal
+        - How to construct a anonymous product type (maybe something akin to a record)
+        - How to construct a named type 
+        - How would we handle structural and nominal typing 
 - remove 'case _ =>' matches
-
-adding type aliases:
-- OK, we have a way to store a type in the context under some name
-- NEED: way to annotate a expression with a name that references a type in the context 

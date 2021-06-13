@@ -39,11 +39,12 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
                   )
                 )
               )
-              theta <- instantiateR(gamma, alpha1, arg)
+              theta             <- instantiateR(gamma, alpha1, arg)
+              appliedReturnType <- applyContext(returnType, theta)
               delta <- instantiateL(
                 theta,
                 alpha2,
-                applyContext(returnType, theta)
+                appliedReturnType
               )
             } yield delta
           }
@@ -103,8 +104,9 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
                   )
                 )
               )
-              theta <- instantiateL(gamma, alpha1, arg)
-              delta <- instantiateR(theta, alpha2, applyContext(ret, theta))
+              theta             <- instantiateL(gamma, alpha1, arg)
+              appliedReturnType <- applyContext(ret, theta)
+              delta <- instantiateR(theta, alpha2, appliedReturnType)
             } yield delta
           }
           //InstRAllL
@@ -114,10 +116,11 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
               gamma = context
                 .add(CMarker(beta1))
                 .add(CExistential(beta1))
+              substituted <- substitution(context, b, beta, TExistential(beta1))
               theta <- instantiateR(
                 gamma,
                 alpha,
-                substitution(b, beta, TExistential(beta1))
+                substituted
               )
               delta <- theta.drop(CMarker(beta1))
             } yield delta

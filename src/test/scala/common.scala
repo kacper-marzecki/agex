@@ -3,6 +3,7 @@ import Type.*
 import LiteralType.*
 import Literal.*
 import ContextElement.*
+import zio.*
 
 object TestCommonExpressions {
   val litInt     = ELiteral(LInt(1))
@@ -17,11 +18,15 @@ object TestCommonExpressions {
 }
 
 object CommonTestFunctions {
-  def runSynth(expr: Expression, context: Context = Context()) =
+  def runSynth(
+      expr: Expression,
+      context: Context = Context(),
+      debug: Boolean = false
+  ) =
     synth(expr, context)
-      // .tap(prettyPrint(_, "synthResult"))
+      .tap(if (debug) prettyPrint(_, "synthResult") else _ => ZIO.unit)
+      .map(_._2)
       .map(_._type)
       .provideSomeLayer[zio.ZEnv](CompilerState.live)
-      .tapError(prettyPrint(_, "synthError"))
-
+      .tapError(if (debug) prettyPrint(_, "synthError") else _ => ZIO.unit)
 }
