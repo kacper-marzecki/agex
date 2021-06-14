@@ -48,3 +48,33 @@ def anyM[R, E, A](
     if (res) ZIO.succeed(res)
     else test(elem)
   )
+
+// def getKeys[A, B](map: Map[A, B], keys: Iterable[A]): Map[A, B] = {
+//   val keySet = keys.toSet
+//   map.filter { case (k, v) => keySet.contains(k) }
+// }
+
+case class ExtractionResult[A, B](
+    included: Map[A, B],
+    excluded: Map[A, B],
+    notFound: Set[A]
+)
+def extractKeys[A, B](
+    map: Map[A, B],
+    keys: Iterable[A]
+): ExtractionResult[A, B] = {
+  val keySet   = keys.toSet
+  val included = scala.collection.mutable.Map[A, B]()
+  val excluded = scala.collection.mutable.Map[A, B]()
+  val notFound = scala.collection.mutable.Set.from(keys)
+  map.foreachEntry((k, v) => {
+    if (keySet.contains(k)) {
+      included.addOne((k, v))
+      notFound.remove(k)
+    } else {
+      excluded.addOne((k, v));
+    }
+    ()
+  })
+  ExtractionResult(included.toMap, excluded.toMap, notFound.toSet)
+}

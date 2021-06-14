@@ -201,9 +201,29 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           subtype(delta, a, b)
         }
       }
-      case (TStruct(fieldsA), TStruct(typesB)) => {
+      case (TStruct(fieldsA), TStruct(fieldsB)) => {
         // TODO: need to accumulate the built context, as the nested context might contain new variables
-        ZIO.foreach_ ???
+        val extractedKeys = extractKeys(fieldsA, fieldsB.keys)
+        if (!extractedKeys.notFound.isEmpty) {
+          fail(MissingFields(extractedKeys.notFound.toList))
+        } else {
+          val commonFields = fieldsB.keys.map(it =>
+            (extractedKeys.included.get(it), fieldsB.get(it))
+          )
+          ZIO.foldLeft(commonFields)(context) {
+            case (delta, (maybeA, maybeB)) =>
+              for {
+                // TODO: rewrite to not require an Unexpected error here
+                a <- ZIO
+                  .fromOption(maybeA)
+                  .mapError(_ => Unexpected("Should not be empty"))
+                b <- ZIO
+                  .fromOption(maybeB)
+                  .mapError(_ => Unexpected("Should not be empty"))
+                res <- subtype(delta, a, b)
+              } yield res
+          }
+        }
       }
       //≤∀L
       case (TQuantification(name, quantType), _) => {
