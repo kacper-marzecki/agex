@@ -142,6 +142,8 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
       valueTypes.forall(isWellFormed(context, _))
     case TTypeRef(targetType) =>
       context.hasTypeDefinition(targetType)
+    case TStruct(fieldTypes) =>
+      fieldTypes.values.forall(isWellFormed(context, _))
   }
 }
 
@@ -167,5 +169,11 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
       context
         .getTypeDefinition(name)
         .flatMap(applyContext(_, context))
+    case TStruct(fieldTypes) =>
+      ZIO
+        .foreach(fieldTypes) { case (k, v) =>
+          applyContext(v, context).map((k, _))
+        }
+        .map(TStruct.apply)
   }
 }

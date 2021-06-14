@@ -19,11 +19,9 @@ object Expression {
   case class EAnnotation(expr: Expression, annotatedType: Type)
       extends Expression
   case class ETuple(values: List[Expression]) extends Expression
-  case class ETypeAlias(
-      newName: String,
-      targetType: Type,
-      expr: Expression
-  ) extends Expression
+  case class ETypeAlias(newName: String, targetType: Type, expr: Expression)
+      extends Expression
+  case class EStruct(fields: Map[String, Expression]) extends Expression
 }
 
 sealed trait LiteralType
@@ -52,57 +50,60 @@ object Type {
   case class TFunction(arg: Type, ret: Type)            extends Type
   case class TTuple(valueTypes: List[Type])             extends Type
   case class TTypeRef(targetType: String)               extends Type
+  case class TStruct(fieldTypes: Map[String, Type])     extends Type
 }
 
-sealed trait TypedExpression(val _type: Type)
+sealed trait TypedExpression {
+  def _type: Type
+}
 object TypedExpression {
-  case class TEVariable(name: String, override val _type: Type)
-      extends TypedExpression(_type)
-  case class TELiteral(it: Literal, override val _type: Type)
-      extends TypedExpression(_type)
+  case class TEVariable(name: String, _type: Type) extends TypedExpression
+  case class TELiteral(it: Literal, _type: Type)   extends TypedExpression
   case class TELambda(
       arg: String,
       body: TypedExpression,
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
   case class TEApplication(
       fun: TypedExpression,
       arg: TypedExpression,
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
   case class TELet(
       name: String,
       value: TypedExpression,
       body: TypedExpression,
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
   case class TEAnnotation(
       expr: TypedExpression,
       annotatedType: Type,
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
   case class TETuple(
       values: List[TypedExpression],
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
   case class TETypeAlias(
       newName: String,
       targetType: Type,
       expr: TypedExpression,
-      override val _type: Type
-  ) extends TypedExpression(_type)
+      _type: Type
+  ) extends TypedExpression
+  case class TEStruct(
+      fields: Map[String, TypedExpression],
+      _type: Type
+  ) extends TypedExpression
 }
 
-sealed trait ContextElement(val name: String)
+sealed trait ContextElement {
+  def name: String
+}
 object ContextElement {
-  case class CVariable(override val name: String) extends ContextElement(name)
-  case class CExistential(override val name: String)
-      extends ContextElement(name)
-  case class CSolved(override val name: String, _type: Type)
-      extends ContextElement(name)
-  case class CTypedVariable(override val name: String, _type: Type)
-      extends ContextElement(name)
-  case class CMarker(override val name: String) extends ContextElement(name)
-  case class CTypeDefinition(override val name: String, _type: Type)
-      extends ContextElement(name)
+  case class CVariable(name: String)                    extends ContextElement
+  case class CExistential(name: String)                 extends ContextElement
+  case class CSolved(name: String, _type: Type)         extends ContextElement
+  case class CTypedVariable(name: String, _type: Type)  extends ContextElement
+  case class CMarker(name: String)                      extends ContextElement
+  case class CTypeDefinition(name: String, _type: Type) extends ContextElement
 }

@@ -15,6 +15,8 @@ enum AppError extends RuntimeException {
   case ShadowedVariableName(context: Context, name: String)
   case TypeWithNameAlreadyExists(context: Context, name: String, _type: Type)
   case TypeNotKnown(context: Context, name: String)
+  case MissingFields(fields: List[String])
+  case Unexpected(label: String)
 }
 
 type Env = ZEnv & Has[CompilerState]
