@@ -202,7 +202,6 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         }
       }
       case (TStruct(fieldsA), TStruct(fieldsB)) => {
-        // TODO: need to accumulate the built context, as the nested context might contain new variables
         val extractedKeys = extractKeys(fieldsA, fieldsB.keys)
         if (!extractedKeys.notFound.isEmpty) {
           fail(MissingFields(extractedKeys.notFound.toList))

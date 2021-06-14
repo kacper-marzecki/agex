@@ -92,10 +92,7 @@ object SynthTest extends DefaultRunnableSpec {
     testM("Id annotated explicitly as forall a. a -> a works") {
       val expr = ELet(
         "someFunction",
-        EAnnotation(
-          idFunction,
-          TQuantification("a", TFunction(TVariable("a"), TVariable("a")))
-        ),
+        annotatedId,
         EApplication(EVariable("someFunction"), litBool)
       )
       assertM(runSynth(expr))(
