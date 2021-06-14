@@ -16,3 +16,6 @@
              Nominal types could be implemented using the special :__struct__ tag in a structural type
 
 - remove 'case _ =>' matches
+- allow annotating only function parameter
+    - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
+- struct field access expression (dot ?)
