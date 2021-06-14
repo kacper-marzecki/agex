@@ -36,7 +36,7 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("Id has a x -> x type") {
       assertM(runSynth(idFunction))(
-        equalTo(TFunction(TExistential("t1"), TExistential("t1")))
+        equalTo(TLambda(TExistential("t1"), TExistential("t1")))
       )
     },
     testM("Tuple type is correctly inferred") {
@@ -102,7 +102,7 @@ object SynthTest extends DefaultRunnableSpec {
     testM("function can be curried") {
       val plusFunction = EAnnotation(
         ELambda("a", ELambda("b", ELiteral(LInt(1)))),
-        TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
+        TLambda(TLiteral(LTInt), TLambda(TLiteral(LTInt), TLiteral(LTInt)))
       )
       val expr = EApplication(
         EApplication(plusFunction, ELiteral(LInt(1))),
@@ -120,7 +120,7 @@ object SynthTest extends DefaultRunnableSpec {
       // apply(plus1, 1)
       val plusFunction = EAnnotation(
         ELambda("a", ELambda("b", ELiteral(LInt(1)))),
-        TFunction(TLiteral(LTInt), TFunction(TLiteral(LTInt), TLiteral(LTInt)))
+        TLambda(TLiteral(LTInt), TLambda(TLiteral(LTInt), TLiteral(LTInt)))
       )
       val expr = ELet(
         "plus",
@@ -153,9 +153,9 @@ object SynthTest extends DefaultRunnableSpec {
         Vector(
           CTypedVariable(
             "+",
-            TFunction(
+            TLambda(
               TLiteral(LTInt),
-              TFunction(TLiteral(LTInt), TLiteral(LTInt))
+              TLambda(TLiteral(LTInt), TLiteral(LTInt))
             )
           )
         )
@@ -174,9 +174,9 @@ object SynthTest extends DefaultRunnableSpec {
         Vector(
           CTypedVariable(
             "+",
-            TFunction(
+            TLambda(
               TLiteral(LTInt),
-              TFunction(TLiteral(LTInt), TLiteral(LTInt))
+              TLambda(TLiteral(LTInt), TLiteral(LTInt))
             )
           )
         )
@@ -263,7 +263,7 @@ object SynthTest extends DefaultRunnableSpec {
         TTypeRef("Integer"),
         ETypeAlias(
           "kek",
-          TFunction(TTypeRef("asd"), TLiteral(LTBool)),
+          TLambda(TTypeRef("asd"), TLiteral(LTBool)),
           ELet(
             "fun",
             EAnnotation(ELambda("a", ELiteral(LBool(false))), TTypeRef("kek")),

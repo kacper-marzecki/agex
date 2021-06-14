@@ -19,7 +19,7 @@ object TupleTest extends DefaultRunnableSpec {
     ),
     TQuantification(
       "a",
-      TFunction(
+      TLambda(
         TVariable("a"),
         TTuple(List(TVariable("a"), TVariable("a"), TLiteral(LTBool)))
       )

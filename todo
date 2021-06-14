@@ -19,3 +19,4 @@
 - allow annotating only function parameter
     - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
 - struct field access expression (dot ?)
+- non-unary functions

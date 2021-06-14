@@ -24,7 +24,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
       } else {
         b match {
           //InstLArr
-          case TFunction(arg, returnType) => {
+          case TLambda(arg, returnType) => {
             for {
               alpha1 <- CompilerState.makeExistential
               alpha2 <- CompilerState.makeExistential
@@ -35,7 +35,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
                   CExistential(alpha1),
                   CSolved(
                     alpha,
-                    TFunction(TExistential(alpha1), TExistential(alpha2))
+                    TLambda(TExistential(alpha1), TExistential(alpha2))
                   )
                 )
               )
@@ -86,7 +86,7 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
       } else {
         a match {
           //InstRArr
-          case TFunction(arg, ret) => {
+          case TLambda(arg, ret) => {
             for {
               alpha1 <- CompilerState.makeExistential
               alpha2 <- CompilerState.makeExistential
@@ -97,13 +97,14 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
                   CExistential(alpha1),
                   CSolved(
                     alpha,
-                    TFunction(
+                    TLambda(
                       TExistential(alpha1),
                       TExistential(alpha2)
                     )
                   )
                 )
               )
+              // TODO: idea: maybe we could fold the context over a list of arguments, as they are independent of each other
               theta             <- instantiateL(gamma, alpha1, arg)
               appliedReturnType <- applyContext(ret, theta)
               delta <- instantiateR(theta, alpha2, appliedReturnType)

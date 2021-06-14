@@ -12,7 +12,7 @@ object TestCommonExpressions {
   val idFunction = ELambda("x", EVariable("x"))
   val annotatedId = EAnnotation(
     idFunction,
-    TQuantification("a", TFunction(TVariable("a"), TVariable("a")))
+    TQuantification("a", TLambda(TVariable("a"), TVariable("a")))
   )
   val strBoolTuple = ETuple(List(litString, litBool))
 }

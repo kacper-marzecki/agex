@@ -37,9 +37,9 @@ object LiteralType {
 sealed trait Type {
   def isMonotype: Boolean =
     this match {
-      case _: Type.TQuantification  => false
-      case Type.TFunction(arg, ret) => arg.isMonotype && ret.isMonotype
-      case _                        => true
+      case _: Type.TQuantification => false
+      case Type.TLambda(arg, ret)  => arg.isMonotype && ret.isMonotype
+      case _                       => true
     }
 }
 object Type {
@@ -47,7 +47,7 @@ object Type {
   case class TVariable(name: String)                    extends Type
   case class TExistential(name: String)                 extends Type
   case class TQuantification(name: String, _type: Type) extends Type
-  case class TFunction(arg: Type, ret: Type)            extends Type
+  case class TLambda(arg: Type, ret: Type)              extends Type
   case class TTuple(valueTypes: List[Type])             extends Type
   case class TTypeRef(targetType: String)               extends Type
   case class TStruct(fieldTypes: Map[String, Type])     extends Type

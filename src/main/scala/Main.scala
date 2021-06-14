@@ -43,7 +43,7 @@ def checksAgainst(
       )
     }
     //Decl→I
-    case (ELambda(arg, body), TFunction(argType, bodyType)) => {
+    case (ELambda(arg, body), TLambda(argType, bodyType)) => {
       val typedVar = CTypedVariable(arg, argType)
       for {
         gamma              <- context.add(typedVar)
@@ -114,13 +114,13 @@ def substitution(
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
-    case TFunction(arg, ret) =>
+    case TLambda(arg, ret) =>
       for {
         (argType, retType) <- ZIO.tupled(
           substitution(context, arg, alpha, b),
           substitution(context, ret, alpha, b)
         )
-      } yield TFunction(argType, retType)
+      } yield TLambda(argType, retType)
     case TTypeRef(name) =>
       context
         .getTypeDefinition(name)
@@ -143,7 +143,7 @@ def occursIn(
   a match {
     case TLiteral(_)     => succeed(false)
     case TVariable(name) => succeed(alpha == name)
-    case TFunction(arg, ret) =>
+    case TLambda(arg, ret) =>
       anyM(List(arg, ret), occursIn(context, alpha, _))
     case TQuantification(beta, t) => {
       if (alpha == beta) {
@@ -185,7 +185,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           .as(context)
       }
       //≤->
-      case (TFunction(arg1, ret1), TFunction(arg2, ret2)) => {
+      case (TLambda(arg1, ret1), TLambda(arg2, ret2)) => {
         for {
           theta <- subtype(context, arg1, arg2)
           (a, b) <- ZIO.tupled(
@@ -298,7 +298,7 @@ def applicationSynthesizesTo(
             CExistential(alpha1),
             CSolved(
               name,
-              TFunction(
+              TLambda(
                 TExistential(alpha1),
                 TExistential(alpha2)
               )
@@ -323,7 +323,7 @@ def applicationSynthesizesTo(
       } yield result
     }
     //App
-    case TFunction(arg, ret) =>
+    case TLambda(arg, ret) =>
       for {
         (typedExpr, delta) <- checksAgainst(context, expr, arg)
       } yield (typedExpr, ret, delta)
@@ -386,7 +386,7 @@ def synthesizesTo(
             .add(CTypedVariable(arg, TExistential(alpha)))
         (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(beta))
         delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
-        functionType = TFunction(TExistential(alpha), TExistential(beta))
+        functionType = TLambda(TExistential(alpha), TExistential(beta))
       } yield (
         TELambda(arg, typedRet, functionType),
         delta

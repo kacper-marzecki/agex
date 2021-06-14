@@ -132,7 +132,7 @@ def isWellFormed(context: Context, _type: Type): Boolean = {
   _type match {
     case _: TLiteral     => true
     case TVariable(name) => context.hasVariable(name)
-    case TFunction(arg, ret) =>
+    case TLambda(arg, ret) =>
       isWellFormed(context, arg) && isWellFormed(context, ret)
     case TQuantification(alpha, a) =>
       isWellFormed(context.add(CVariable(alpha)), a)
@@ -155,11 +155,11 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TExistential(name) => {
       context.getSolved(name).fold(succeed(_type))(applyContext(_, context))
     }
-    case TFunction(argType, returnType) =>
+    case TLambda(argType, returnType) =>
       for {
         arg  <- applyContext(argType, context)
         body <- applyContext(returnType, context)
-      } yield TFunction(arg, body)
+      } yield TLambda(arg, body)
     case TQuantification(name, quantType) => {
       applyContext(quantType, context).map(TQuantification(name, _))
     }

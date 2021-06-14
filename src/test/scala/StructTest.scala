@@ -47,7 +47,7 @@ object StructTest extends DefaultRunnableSpec {
           ),
           TQuantification(
             "a",
-            TFunction(
+            TLambda(
               TVariable("a"),
               TStruct(
                 Map[String, Type](
@@ -83,7 +83,7 @@ object StructTest extends DefaultRunnableSpec {
         "lambda",
         EAnnotation(
           ELambda("a", ELiteral(LBool(false))),
-          TFunction(
+          TLambda(
             TStruct(
               Map[String, Type](
                 "A" -> TLiteral(LTString)
@@ -109,7 +109,7 @@ object StructTest extends DefaultRunnableSpec {
         "lambda",
         EAnnotation(
           ELambda("a", ELiteral(LBool(false))),
-          TFunction(
+          TLambda(
             TStruct(
               Map[String, Type](
                 "A" -> TLiteral(LTString),
@@ -137,7 +137,7 @@ object StructTest extends DefaultRunnableSpec {
         "lambda",
         EAnnotation(
           ELambda("a", ELiteral(LBool(false))),
-          TFunction(
+          TLambda(
             TStruct(
               Map[String, Type](
                 "A" -> TLiteral(LTBool)
