@@ -16,6 +16,7 @@ enum AppError extends RuntimeException {
   case TypeWithNameAlreadyExists(context: Context, name: String, _type: Type)
   case TypeNotKnown(context: Context, name: String)
   case MissingFields(fields: List[String])
+  case TupleSizesDontMatch(a: Type.TTuple, b: Type.TTuple)
   case Unexpected(label: String)
 }
 

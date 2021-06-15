@@ -10,6 +10,8 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.runSynth
+import scala.jdk.FunctionWrappers.RichToLongFunctionAsFunction1
+import java.security.spec.EdDSAParameterSpec
 
 object TupleTest extends DefaultRunnableSpec {
   val aToTupleOfAABool = EAnnotation(
@@ -69,6 +71,26 @@ object TupleTest extends DefaultRunnableSpec {
                 List(TLiteral(LTString), TLiteral(LTString), TLiteral(LTBool))
               )
             )
+          )
+        )
+      )
+    },
+    testM("gives nice error message on tuple length mismatch") {
+      val exp = EApplication(
+        EAnnotation(
+          ELambda("inputTuple", EVariable("inputTuple")),
+          TLambda(
+            TTuple(List(TLiteral(LTInt))),
+            TTuple(List(TLiteral(LTInt)))
+          )
+        ),
+        ETuple(List(ELiteral(LInt(1)), ELiteral(LInt(1))))
+      )
+      assertM(runSynth(exp).flip)(
+        equalTo(
+          AppError.TupleSizesDontMatch(
+            TTuple(List(TLiteral(LTInt), TLiteral(LTInt))),
+            TTuple(List(TLiteral(LTInt)))
           )
         )
       )

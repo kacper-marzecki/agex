@@ -231,7 +231,7 @@ object SynthTest extends DefaultRunnableSpec {
     testM("doesnt type-check with named annotation if type doesnt exist") {
       val expr = EAnnotation(ELiteral(LBool(true)), TTypeRef("annotatedType"))
       assertM(runSynth(expr).flip)(
-        // TODO: should fail with AppError.TypeNotKnown
+        // TODO: nice_to_have: AppError.TypeNotKnown would be more informative
         Assertion.assertion("raises correct error")() {
           case it: AppError.TypeNotWellFormed
               if it._type == TTypeRef("annotatedType") =>

@@ -12,8 +12,6 @@ import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
 
-case class SynthResult(typed: List[TypedExpression], context: Context)
-
 def assertLiteralChecksAgainst(
     literal: Literal,
     _type: LiteralType
@@ -195,10 +193,13 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           delta <- subtype(theta, a, b)
         } yield delta
       }
-      // TODO: instead of failing to match, we could fail with an informative message
-      case (TTuple(typesA), TTuple(typesB)) if (typesA.size == typesB.size) => {
-        ZIO.foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
-          subtype(delta, a, b)
+      case (TTuple(typesA), TTuple(typesB)) => {
+        if (typesA.size != typesB.size) {
+          fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
+        } else {
+          ZIO.foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
+            subtype(delta, a, b)
+          }
         }
       }
       case (TStruct(fieldsA), TStruct(fieldsB)) => {
@@ -206,21 +207,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         if (!extractedKeys.notFound.isEmpty) {
           fail(MissingFields(extractedKeys.notFound.toList))
         } else {
-          val commonFields = fieldsB.keys.map(it =>
-            (extractedKeys.included.get(it), fieldsB.get(it))
+          val commonFields = fieldsB.keys.toList.mapFilter(it =>
+            (extractedKeys.included.get(it), fieldsB.get(it)).bisequence
           )
-          ZIO.foldLeft(commonFields)(context) {
-            case (delta, (maybeA, maybeB)) =>
-              for {
-                // TODO: rewrite to not require an Unexpected error here
-                a <- ZIO
-                  .fromOption(maybeA)
-                  .mapError(_ => Unexpected("Should not be empty"))
-                b <- ZIO
-                  .fromOption(maybeB)
-                  .mapError(_ => Unexpected("Should not be empty"))
-                res <- subtype(delta, a, b)
-              } yield res
+          ZIO.foldLeft(commonFields)(context) { case (delta, (a, b)) =>
+            subtype(delta, a, b)
           }
         }
       }
@@ -331,6 +322,18 @@ def applicationSynthesizesTo(
   }
 }
 
+case class SynthResult(typed: List[TypedExpression], context: Context)
+def synthesizesTo(
+    context: Context,
+    exprs: Iterable[Expression]
+): Eff[SynthResult] =
+  // fold right to avoid appending the typedElement to the result list with O(n)
+  ZIO.foldRight(exprs)(SynthResult(Nil, context)) { (elem, result) =>
+    for {
+      (elemTyped, gamma) <- synthesizesTo(result.context, elem)
+    } yield SynthResult(elemTyped :: result.typed, gamma)
+  }
+
 def synthesizesTo(
     context: Context,
     expr: Expression
@@ -394,32 +397,17 @@ def synthesizesTo(
     }
     case ETuple(values) => {
       for {
-        // fold right to avoid appending the typedElement to the result list with O(n)
-        result <-
-          ZIO.foldRight(values)(SynthResult(Nil, context)) { (elem, result) =>
-            for {
-              (elemTyped, gamma) <- synthesizesTo(result.context, elem)
-            } yield SynthResult(elemTyped :: result.typed, gamma)
-          }
+        result <- synthesizesTo(context, values)
         tupleType = TTuple(result.typed.map(_._type))
       } yield (TETuple(result.typed, tupleType), result.context)
     }
     case EStruct(fields) => {
       for {
-        // fold right to avoid appending the typedElement to the result list with O(n)
-        // TODO abstract this aggregation of a Eff[(TypedExpression, Context)] into a separate function
-        result <-
-          ZIO.foldRight(fields.values)(SynthResult(Nil, context)) {
-            (elem, result) =>
-              for {
-                (elemTyped, gamma) <- synthesizesTo(result.context, elem)
-              } yield SynthResult(elemTyped :: result.typed, gamma)
-          }
+        result <- synthesizesTo(context, fields.values)
         typedFields = fields.keys.zip(result.typed).toMap
         fieldTypes = typedFields.map { case (fieldName, typedField) =>
           (fieldName, typedField._type)
         }.toMap
-        // tupleType = TTuple(result.typed.map(_._type))
       } yield (TEStruct(typedFields, TStruct(fieldTypes)), result.context)
     }
     case ELet(name, expr, body) => {
