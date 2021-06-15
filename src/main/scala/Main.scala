@@ -50,12 +50,19 @@ def checksAgainst(
         delta              <- theta.drop(typedVar)
       } yield (TELambda(arg, typedBody, _type), delta)
     }
-    case (EFunction(args, body), TFunction(argTypes, bodyType)) => ???
+    case (EFunction(args, body), TFunction(argTypes, bodyType)) => {
+      // TODO: check arity
+      val typedVars = args.zip(argTypes).map(CTypedVariable.apply.tupled)
+      for {
+        a <- context.addAll(typedVars)
+      } yield ()
+      ???
+    }
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
-      val gamma    = context.add(variable)
       for {
+        gamma          <- context.add(variable)
         (typed, theta) <- checksAgainst(gamma, expression, quantType)
         delta          <- theta.drop(variable)
       } yield (typed, delta)
@@ -223,9 +230,8 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (TQuantification(name, quantType), _) => {
         for {
           alpha <- CompilerState.makeExistential
-          gamma = context
-            .add(CMarker(alpha))
-            .add(CExistential(alpha))
+          gamma <- context
+            .addAll(CMarker(alpha), CExistential(alpha))
           substitutedQuantType <- substitution(
             context,
             quantType,
@@ -238,9 +244,14 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //≤∀R
       case (_, TQuantification(name, quantType)) => {
-        val theta = context.add(CVariable(name))
-        subtype(theta, a, quantType)
-          .flatMap(_.drop(CVariable(name)))
+        for {
+          theta <- context.add(CVariable(name))
+          gamma <- subtype(theta, a, quantType)
+          delta <- gamma.drop(CVariable(name))
+        } yield delta
+        // val theta =
+        // subtype(theta, a, quantType)
+        //   .flatMap(_.drop(CVariable(name)))
       }
       //≤InstatiateL
       case (TExistential(name), _) => {
@@ -307,7 +318,7 @@ def applicationSynthesizesTo(
     case TQuantification(name, quantType) => {
       for {
         alpha <- CompilerState.makeExistential
-        gamma = context.add(CExistential(alpha))
+        gamma <- context.add(CExistential(alpha))
         substitutedType <- substitution(
           context,
           quantType,
@@ -385,9 +396,11 @@ def synthesizesTo(
         beta  <- CompilerState.makeExistential
         gamma <-
           context
-            .add(CExistential(alpha))
-            .add(CExistential(beta))
-            .add(CTypedVariable(arg, TExistential(alpha)))
+            .addAll(
+              CExistential(alpha),
+              CExistential(beta),
+              CTypedVariable(arg, TExistential(alpha))
+            )
         (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(beta))
         delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
         functionType = TLambda(TExistential(alpha), TExistential(beta))

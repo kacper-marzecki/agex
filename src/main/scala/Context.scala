@@ -5,12 +5,10 @@ import AppError.*
 import ContextElement.*
 import Type.*
 import cats.syntax.apply
+import scala.jdk.FunctionWrappers.RichToLongFunctionAsFunction1
 
-type AddResult[A <: ContextElement] = A match {
-  case CTypedVariable  => IO[ShadowedVariableName, Context]
-  case CTypeDefinition => IO[TypeWithNameAlreadyExists, Context]
-  case ?               => Context
-}
+type AddError  = ShadowedVariableName | TypeWithNameAlreadyExists
+type AddResult = IO[AddError, Context]
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
   lazy val typedVariableNames = elements.mapFilter { it =>
@@ -27,43 +25,29 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     }
   }.toSet
 
-  /** Watches for name shadowing in the current context
-    *
-    * TODO: fix dirty hack - remove casting to AddResult[A].
-    *
-    * I don't know why, but the compiler doesn't think we return the
-    * AddResult[A] match type.
-    * https://dotty.epfl.ch/docs/reference/new-types/match-types.html
-    */
-  def add[A <: ContextElement](element: A): AddResult[A] = {
+  def add[A <: ContextElement](element: A): AddResult =
+    validateCanAdd(element)
+      .as(Context(elements = elements.appended(element)))
+
+  def addAll[A <: ContextElement](newElements: Iterable[A]): AddResult =
+    ZIO.foldLeft(newElements)(this) { case (delta, elem) => delta.add(elem) }
+
+  def addAll[A <: ContextElement](newElements: A*): AddResult =
+    addAll(newElements)
+
+  private def validateCanAdd(element: ContextElement): IO[AddError, Unit] =
     element match {
       case _: CTypedVariable =>
-        if (typedVariableNames.contains(element.name)) {
-          fail(
-            ShadowedVariableName(this, element.name)
-          )
-            .asInstanceOf[AddResult[A]]
-        } else {
-          succeed(Context(elements = elements.appended(element)))
-            .asInstanceOf[AddResult[A]]
-        }
+        if (typedVariableNames.contains(element.name))
+          fail(ShadowedVariableName(this, element.name))
+        else ZIO.unit
       case it: CTypeDefinition =>
-        if (typeDefinitions.contains(it.name)) {
-          fail(
-            TypeWithNameAlreadyExists(this, it.name, it._type)
-          )
-            .asInstanceOf[AddResult[A]]
-        } else {
-          succeed(Context(elements = elements.appended(element)))
-            .asInstanceOf[AddResult[A]]
-        }
-
-      case _ =>
-        this
-          .copy(elements = elements.appended(element))
-          .asInstanceOf[AddResult[A]]
+        if (typeDefinitions.contains(it.name))
+          fail(TypeWithNameAlreadyExists(this, it.name, it._type))
+        else ZIO.unit
+      case _ => ZIO.unit
     }
-  }
+
   def splitAt(it: ContextElement): IO[ElementNotFound, (Context, Context)] = {
     elements.findIndexOf(it) match {
       case None => fail(ElementNotFound(this, it))
@@ -135,9 +119,12 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       else fail(TypeNotWellFormed(context, _type))
     case TLambda(arg, ret) =>
       checkIsWellFormed(context, arg) *> checkIsWellFormed(context, ret)
-    case TFunction(args, ret) => ???
+    case TFunction(args, ret) =>
+      ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
     case TQuantification(alpha, a) =>
-      checkIsWellFormed(context.add(CVariable(alpha)), a)
+      context
+        .add(CVariable(alpha))
+        .flatMap(checkIsWellFormed(_, a))
     case TExistential(name) =>
       if (context.hasExistential(name) || context.getSolved(name).isDefined) {
         ZIO.unit
@@ -145,6 +132,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         fail(TypeNotWellFormed(context, _type))
       }
     case TTuple(valueTypes) =>
+      // TODO: could be expressed in ZIO.foreach_
       ZIO.forall(valueTypes)(checkIsWellFormed(context, _).as(true)).unit
     case TTypeRef(targetType) =>
       if (context.hasTypeDefinition(targetType)) {
@@ -153,6 +141,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         fail(TypeNotKnown(context, targetType))
       }
     case TStruct(fieldTypes) =>
+      // TODO: could be expressed in ZIO.foreach_
       ZIO.forall(fieldTypes.values)(checkIsWellFormed(context, _).as(true)).unit
   }
 }
@@ -170,7 +159,11 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
         arg  <- applyContext(argType, context)
         body <- applyContext(returnType, context)
       } yield TLambda(arg, body)
-    case TFunction(argTypes, returnType) => ???
+    case TFunction(argTypes, returnType) =>
+      for {
+        args <- ZIO.foreach(argTypes)(applyContext(_, context))
+        body <- applyContext(returnType, context)
+      } yield TFunction(args, body)
     case TQuantification(name, quantType) => {
       applyContext(quantType, context).map(TQuantification(name, _))
     }

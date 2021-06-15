@@ -59,11 +59,8 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
           //InstAIIR
           case TQuantification(beta, b) => {
             for {
-              gamma <- instantiateL(
-                context.add(CVariable(beta)),
-                alpha,
-                b
-              )
+              theta <- context.add(CVariable(beta))
+              gamma <- instantiateL(theta, alpha, b)
               delta <- gamma.drop(CVariable(beta))
             } yield delta
           }
@@ -123,9 +120,8 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
           case TQuantification(beta, b) => {
             for {
               beta1 <- CompilerState.makeExistential
-              gamma = context
-                .add(CMarker(beta1))
-                .add(CExistential(beta1))
+              gamma <- context
+                .addAll(CMarker(beta1), CExistential(beta1))
               substituted <- substitution(context, b, beta, TExistential(beta1))
               theta <- instantiateR(
                 gamma,
