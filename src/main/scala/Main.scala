@@ -11,6 +11,7 @@ import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
+import javax.imageio.plugins.tiff.TIFFField
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -49,6 +50,7 @@ def checksAgainst(
         delta              <- theta.drop(typedVar)
       } yield (TELambda(arg, typedBody, _type), delta)
     }
+    case (EFunction(args, body), TFunction(argTypes, bodyType)) => ???
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
@@ -119,6 +121,7 @@ def substitution(
           substitution(context, ret, alpha, b)
         )
       } yield TLambda(argType, retType)
+    case TFunction(args, ret) => ???
     case TTypeRef(name) =>
       context
         .getTypeDefinition(name)
@@ -143,6 +146,7 @@ def occursIn(
     case TVariable(name) => succeed(alpha == name)
     case TLambda(arg, ret) =>
       anyM(List(arg, ret), occursIn(context, alpha, _))
+    case TFunction(args, ret) => ???
     case TQuantification(beta, t) => {
       if (alpha == beta) {
         return succeed(true);
@@ -192,6 +196,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           delta <- subtype(theta, a, b)
         } yield delta
       }
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) => ???
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -391,6 +396,7 @@ def synthesizesTo(
         delta
       )
     }
+    case EFunction(args, ret) => ???
     case ETuple(values) => {
       for {
         result <- synthesizesTo(context, values)
@@ -428,6 +434,7 @@ def synthesizesTo(
           )
       } yield (TEApplication(funTyped, argTyped, applicationType), delta)
     }
+    case EFunctionApplication(fun, args) => ???
   }
 }
 

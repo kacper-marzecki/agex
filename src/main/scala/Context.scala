@@ -135,6 +135,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       else fail(TypeNotWellFormed(context, _type))
     case TLambda(arg, ret) =>
       checkIsWellFormed(context, arg) *> checkIsWellFormed(context, ret)
+    case TFunction(args, ret) => ???
     case TQuantification(alpha, a) =>
       checkIsWellFormed(context.add(CVariable(alpha)), a)
     case TExistential(name) =>
@@ -169,6 +170,7 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
         arg  <- applyContext(argType, context)
         body <- applyContext(returnType, context)
       } yield TLambda(arg, body)
+    case TFunction(argTypes, returnType) => ???
     case TQuantification(name, quantType) => {
       applyContext(quantType, context).map(TQuantification(name, _))
     }

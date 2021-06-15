@@ -8,6 +8,10 @@ object Literal {
   case object LUnit              extends Literal
 }
 
+/** When adding a new expression
+  *   - update synthesis logic
+  *   - update checksAgainst
+  */
 sealed trait Expression
 object Expression {
   case class EVariable(name: String)                        extends Expression
@@ -22,6 +26,10 @@ object Expression {
   case class ETypeAlias(newName: String, targetType: Type, expr: Expression)
       extends Expression
   case class EStruct(fields: Map[String, Expression]) extends Expression
+  // Temporary structure, meant to replace ELambda once we figure out how to do n-ary functions
+  case class EFunction(args: List[String], body: Expression) extends Expression
+  case class EFunctionApplication(fun: Expression, args: List[Expression])
+      extends Expression
 }
 
 sealed trait LiteralType
@@ -34,12 +42,19 @@ object LiteralType {
   case object LTBool   extends LiteralType
 }
 
+/** When adding a new Type:
+  *   - update instantiation logic
+  *   - update checksAgainst logic
+  *   - update subtyping logic
+  */
 sealed trait Type {
   def isMonotype: Boolean =
     this match {
       case _: Type.TQuantification => false
       case Type.TLambda(arg, ret)  => arg.isMonotype && ret.isMonotype
-      case _                       => true
+      case Type.TFunction(args, ret) =>
+        args.forall(_.isMonotype) && ret.isMonotype
+      case _ => true
     }
 }
 object Type {
@@ -51,6 +66,7 @@ object Type {
   case class TTuple(valueTypes: List[Type])             extends Type
   case class TTypeRef(targetType: String)               extends Type
   case class TStruct(fieldTypes: Map[String, Type])     extends Type
+  case class TFunction(args: List[Type], ret: Type)     extends Type
 }
 
 sealed trait TypedExpression {
@@ -92,6 +108,13 @@ object TypedExpression {
   ) extends TypedExpression
   case class TEStruct(
       fields: Map[String, TypedExpression],
+      _type: Type
+  ) extends TypedExpression
+  case class TEFunction(args: List[String], body: TypedExpression, _type: Type)
+      extends TypedExpression
+  case class TEFunctionApplication(
+      fun: TypedExpression,
+      args: List[TypedExpression],
       _type: Type
   ) extends TypedExpression
 }

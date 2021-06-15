@@ -55,6 +55,7 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
               )
             } yield delta
           }
+          case TFunction(args, returnType) => ???
           //InstAIIR
           case TQuantification(beta, b) => {
             for {
@@ -117,6 +118,7 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
               delta <- instantiateR(theta, alpha2, appliedReturnType)
             } yield delta
           }
+          case TFunction(args, returnType) => ???
           //InstRAllL
           case TQuantification(beta, b) => {
             for {
