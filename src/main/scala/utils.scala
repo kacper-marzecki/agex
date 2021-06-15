@@ -80,3 +80,10 @@ def extractKeys[A, B](
   })
   ExtractionResult(included.toMap, excluded.toMap, notFound.toSet)
 }
+
+def split[A, B](xs: List[(A, B)]): (List[A], List[B]) =
+  xs.foldRight((List.empty[A], List.empty[B])) {
+    case ((a, b), (accA, accB)) => {
+      (a :: accA, b :: accB)
+    }
+  }

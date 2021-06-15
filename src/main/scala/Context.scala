@@ -77,6 +77,14 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     }
   }
 
+  /** As the Context is ordered, it will assume that the List is in the same
+    * order, and remove the head of the list from the context
+    *
+    * TODO: improve this API, as it requires this ^ implicit contract
+    */
+  def drop(elements: List[ContextElement]): IO[ElementNotFound, Context] =
+    elements.headOption.map(drop(_)).getOrElse(succeed(this))
+
   def getSolved(name: String): Option[Type] =
     elements.mapFilter {
       case CSolved(name1, _type) if name == name1 => Some(_type)
