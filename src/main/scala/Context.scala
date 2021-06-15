@@ -127,23 +127,32 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
 }
 
 /// Fig 7
-// should probably be an assertion IO[Reason, Unit]
-def isWellFormed(context: Context, _type: Type): Boolean = {
+def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
   _type match {
-    case _: TLiteral     => true
-    case TVariable(name) => context.hasVariable(name)
+    case _: TLiteral => ZIO.unit
+    case TVariable(name) =>
+      if (context.hasVariable(name)) ZIO.unit
+      else fail(TypeNotWellFormed(context, _type))
     case TLambda(arg, ret) =>
-      isWellFormed(context, arg) && isWellFormed(context, ret)
+      checkIsWellFormed(context, arg) *> checkIsWellFormed(context, ret)
     case TQuantification(alpha, a) =>
-      isWellFormed(context.add(CVariable(alpha)), a)
+      checkIsWellFormed(context.add(CVariable(alpha)), a)
     case TExistential(name) =>
-      context.hasExistential(name) || context.getSolved(name).isDefined
+      if (context.hasExistential(name) || context.getSolved(name).isDefined) {
+        ZIO.unit
+      } else {
+        fail(TypeNotWellFormed(context, _type))
+      }
     case TTuple(valueTypes) =>
-      valueTypes.forall(isWellFormed(context, _))
+      ZIO.forall(valueTypes)(checkIsWellFormed(context, _).as(true)).unit
     case TTypeRef(targetType) =>
-      context.hasTypeDefinition(targetType)
+      if (context.hasTypeDefinition(targetType)) {
+        ZIO.unit
+      } else {
+        fail(TypeNotKnown(context, targetType))
+      }
     case TStruct(fieldTypes) =>
-      fieldTypes.values.forall(isWellFormed(context, _))
+      ZIO.forall(fieldTypes.values)(checkIsWellFormed(context, _).as(true)).unit
   }
 }
 

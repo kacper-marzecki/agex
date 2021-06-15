@@ -10,19 +10,26 @@ import Expression.*
 import TypedExpression.*
 import ContextElement.*
 
+def canSolve(context: Context, _type: Type): Eff[Boolean] = {
+  if (_type.isMonotype) {
+    checkIsWellFormed(context, _type).isSuccess
+  } else {
+    succeed(false)
+  }
+}
+
 // Fig 10
 def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
   for {
     (left, right) <- context.splitAt(CExistential(alpha))
     //InstLSolve
     result <-
-      if (b.isMonotype && isWellFormed(left, b)) {
-        context.insertInPlace(
+      ZIO.ifM(canSolve(left, b))(
+        onTrue = context.insertInPlace(
           CExistential(alpha),
           List(CSolved(alpha, b))
-        )
-      } else {
-        b match {
+        ),
+        onFalse = b match {
           //InstLArr
           case TLambda(arg, returnType) => {
             for {
@@ -68,7 +75,8 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
           }
           case _ => fail(CannotInstantiateL(context, alpha, b))
         }
-      }
+      )
+
   } yield result
 }
 
@@ -77,14 +85,13 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
   for {
     (left, right) <- context.splitAt(CExistential(alpha))
     result <-
-      if (a.isMonotype && isWellFormed(left, a)) {
+      ZIO.ifM(canSolve(left, a))(
         //InstRSolve
-        context.insertInPlace(
+        onTrue = context.insertInPlace(
           CExistential(alpha),
           List(CSolved(alpha, a))
-        )
-      } else {
-        a match {
+        ),
+        onFalse = a match {
           //InstRArr
           case TLambda(arg, ret) => {
             for {
@@ -135,5 +142,5 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
           }
           case _ => fail(CannotInstantiateR(context, alpha, a))
         }
-      }
+      )
   } yield result

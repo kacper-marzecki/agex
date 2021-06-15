@@ -163,8 +163,8 @@ def occursIn(
 // Ψ ⊢ A ≤ B Under context Ψ, type A is a subtype of B
 def subtype(context: Context, a: Type, b: Type): Eff[Context] =
   for {
-    _ <- assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a))
-    _ <- assertTrue(isWellFormed(context, b), TypeNotWellFormed(context, b))
+    _ <- checkIsWellFormed(context, a)
+    _ <- checkIsWellFormed(context, b)
     delta <- (a, b) match {
       //≤Unit
       case (TLiteral(literalA), TLiteral(literalB)) => {
@@ -173,14 +173,13 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //≤Var
       case (TVariable(nameA), TVariable(nameB)) => {
-        assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a)) *>
+        checkIsWellFormed(context, a) *>
           assertTrue(nameA == nameB, TypeNamesNotEqual(nameA, nameB))
             .as(context)
       }
       //≤Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
-        assertTrue(isWellFormed(context, a), TypeNotWellFormed(context, a))
-          .as(context)
+        checkIsWellFormed(context, a).as(context)
       }
       //≤->
       case (TLambda(arg1, ret1), TLambda(arg2, ret2)) => {
@@ -354,17 +353,14 @@ def synthesizesTo(
     }
     //Anno
     case EAnnotation(expression, annType) => {
-      if (isWellFormed(context, annType)) {
-        for {
-          (typedExpression, delta) <- checksAgainst(
-            context,
-            expression,
-            annType
-          )
-        } yield (TEAnnotation(typedExpression, annType, annType), delta)
-      } else {
-        fail(TypeNotWellFormed(context, annType))
-      }
+      for {
+        _ <- checkIsWellFormed(context, annType)
+        (typedExpression, delta) <- checksAgainst(
+          context,
+          expression,
+          annType
+        )
+      } yield (TEAnnotation(typedExpression, annType, annType), delta)
     }
     case ETypeAlias(newName, targetType, expr) => {
       for {

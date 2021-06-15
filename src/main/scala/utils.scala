@@ -49,6 +49,8 @@ def anyM[R, E, A](
     else test(elem)
   )
 
+// def allM[R, E, A](collection: Iterable[A])
+
 // def getKeys[A, B](map: Map[A, B], keys: Iterable[A]): Map[A, B] = {
 //   val keySet = keys.toSet
 //   map.filter { case (k, v) => keySet.contains(k) }

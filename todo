@@ -20,3 +20,5 @@
     - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
 - struct field access expression (dot ?)
 - non-unary functions
+- think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
+- if expression 
