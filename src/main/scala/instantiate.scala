@@ -55,7 +55,33 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
               )
             } yield delta
           }
-          case TFunction(args, returnType) => ???
+          case TFunction(args, returnType) => {
+            for {
+              retAlpha  <- CompilerState.makeExistential
+              argAlphas <- ZIO.foreach(args)(_ => CompilerState.makeExistential)
+              gamma <- context.insertInPlace(
+                CExistential(alpha),
+                CExistential(retAlpha) ::
+                  // reverse to place the first argument α^ to the right in the context
+                  argAlphas.reverse.map(CExistential(_)) :::
+                  List(
+                    CSolved(
+                      alpha,
+                      TFunction(
+                        argAlphas.map(TExistential(_)),
+                        TExistential(retAlpha)
+                      )
+                    )
+                  )
+              )
+              theta <- ZIO.foldLeft(argAlphas.zip(args))(gamma) {
+                case (delta, (alphaN, argType)) =>
+                  instantiateR(delta, alphaN, argType)
+              }
+              appliedReturnType <- applyContext(returnType, theta)
+              delta <- instantiateL(theta, retAlpha, appliedReturnType)
+            } yield delta
+          }
           //InstAIIR
           case TQuantification(beta, b) => {
             for {
@@ -115,7 +141,33 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
               delta <- instantiateR(theta, alpha2, appliedReturnType)
             } yield delta
           }
-          case TFunction(args, returnType) => ???
+          case TFunction(args, returnType) => {
+            for {
+              retAlpha  <- CompilerState.makeExistential
+              argAlphas <- ZIO.foreach(args)(_ => CompilerState.makeExistential)
+              gamma <- context.insertInPlace(
+                CExistential(alpha),
+                CExistential(retAlpha) ::
+                  // reverse to place the first argument α^ to the right in the context
+                  argAlphas.reverse.map(CExistential(_)) :::
+                  List(
+                    CSolved(
+                      alpha,
+                      TFunction(
+                        argAlphas.map(TExistential(_)),
+                        TExistential(retAlpha)
+                      )
+                    )
+                  )
+              )
+              theta <- ZIO.foldLeft(argAlphas.zip(args))(gamma) {
+                case (delta, (alphaN, argType)) =>
+                  instantiateL(delta, alphaN, argType)
+              }
+              appliedReturnType <- applyContext(returnType, theta)
+              delta <- instantiateR(theta, retAlpha, appliedReturnType)
+            } yield delta
+          }
           //InstRAllL
           case TQuantification(beta, b) => {
             for {

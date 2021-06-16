@@ -25,14 +25,14 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     }
   }.toSet
 
-  def add[A <: ContextElement](element: A): AddResult =
+  def add(element: ContextElement): AddResult =
     validateCanAdd(element)
       .as(Context(elements = elements.appended(element)))
 
-  def addAll[A <: ContextElement](newElements: Iterable[A]): AddResult =
+  def addAll(newElements: Iterable[ContextElement]): AddResult =
     ZIO.foldLeft(newElements)(this) { case (delta, elem) => delta.add(elem) }
 
-  def addAll[A <: ContextElement](newElements: A*): AddResult =
+  def addAll(newElements: ContextElement*): AddResult =
     addAll(newElements)
 
   private def validateCanAdd(element: ContextElement): IO[AddError, Unit] =

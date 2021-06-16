@@ -22,4 +22,5 @@
 - non-unary functions
 - think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
 - if expression 
-- NOT_IMPLEMENTED expression, akin to ??? in scala 
+- NOT_IMPLEMENTED expression, akin to ??? in scala
+- unify apis that take context as an argument - either all take it as a first arg, or the last
