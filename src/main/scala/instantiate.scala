@@ -31,30 +31,6 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
         ),
         onFalse = b match {
           //InstLArr
-          case TLambda(arg, returnType) => {
-            for {
-              alpha1 <- CompilerState.makeExistential
-              alpha2 <- CompilerState.makeExistential
-              gamma <- context.insertInPlace(
-                CExistential(alpha),
-                List(
-                  CExistential(alpha2),
-                  CExistential(alpha1),
-                  CSolved(
-                    alpha,
-                    TLambda(TExistential(alpha1), TExistential(alpha2))
-                  )
-                )
-              )
-              theta             <- instantiateR(gamma, alpha1, arg)
-              appliedReturnType <- applyContext(returnType, theta)
-              delta <- instantiateL(
-                theta,
-                alpha2,
-                appliedReturnType
-              )
-            } yield delta
-          }
           case TFunction(args, returnType) => {
             for {
               retAlpha  <- CompilerState.makeExistential
@@ -117,29 +93,6 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
         ),
         onFalse = a match {
           //InstRArr
-          case TLambda(arg, ret) => {
-            for {
-              alpha1 <- CompilerState.makeExistential
-              alpha2 <- CompilerState.makeExistential
-              gamma <- context.insertInPlace(
-                CExistential(alpha),
-                List(
-                  CExistential(alpha2),
-                  CExistential(alpha1),
-                  CSolved(
-                    alpha,
-                    TLambda(
-                      TExistential(alpha1),
-                      TExistential(alpha2)
-                    )
-                  )
-                )
-              )
-              theta             <- instantiateL(gamma, alpha1, arg)
-              appliedReturnType <- applyContext(ret, theta)
-              delta <- instantiateR(theta, alpha2, appliedReturnType)
-            } yield delta
-          }
           case TFunction(args, returnType) => {
             for {
               retAlpha  <- CompilerState.makeExistential

@@ -9,10 +9,10 @@ object TestCommonExpressions {
   val litInt     = ELiteral(LInt(1))
   val litBool    = ELiteral(LBool(false))
   val litString  = ELiteral(LString("string"))
-  val idFunction = ELambda("x", EVariable("x"))
+  val idFunction = EFunction(List("x"), EVariable("x"))
   val annotatedId = EAnnotation(
     idFunction,
-    TQuantification("a", TLambda(TVariable("a"), TVariable("a")))
+    TQuantification("a", TFunction(List(TVariable("a")), TVariable("a")))
   )
   val strBoolTuple = ETuple(List(litString, litBool))
 }

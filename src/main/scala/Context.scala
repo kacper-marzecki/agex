@@ -125,8 +125,6 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
     case TVariable(name) =>
       if (context.hasVariable(name)) ZIO.unit
       else fail(TypeNotWellFormed(context, _type))
-    case TLambda(arg, ret) =>
-      checkIsWellFormed(context, arg) *> checkIsWellFormed(context, ret)
     case TFunction(args, ret) =>
       ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
     case TQuantification(alpha, a) =>
@@ -162,11 +160,6 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TExistential(name) => {
       context.getSolved(name).fold(succeed(_type))(applyContext(_, context))
     }
-    case TLambda(argType, returnType) =>
-      for {
-        arg  <- applyContext(argType, context)
-        body <- applyContext(returnType, context)
-      } yield TLambda(arg, body)
     case TFunction(argTypes, returnType) =>
       for {
         args <- ZIO.foreach(argTypes)(applyContext(_, context))

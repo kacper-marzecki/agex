@@ -15,14 +15,14 @@ import java.security.spec.EdDSAParameterSpec
 
 object TupleTest extends DefaultRunnableSpec {
   val aToTupleOfAABool = EAnnotation(
-    ELambda(
-      "a",
+    EFunction(
+      List("a"),
       ETuple(List(EVariable("a"), EVariable("a"), ELiteral(LBool(true))))
     ),
     TQuantification(
       "a",
-      TLambda(
-        TVariable("a"),
+      TFunction(
+        List(TVariable("a")),
         TTuple(List(TVariable("a"), TVariable("a"), TLiteral(LTBool)))
       )
     )
@@ -55,8 +55,14 @@ object TupleTest extends DefaultRunnableSpec {
         aToTupleOfAABool,
         ETuple(
           List(
-            EApplication(EVariable("function"), ELiteral(LInt(1))),
-            EApplication(EVariable("function"), ELiteral(LString("1")))
+            EFunctionApplication(
+              EVariable("function"),
+              List(ELiteral(LInt(1)))
+            ),
+            EFunctionApplication(
+              EVariable("function"),
+              List(ELiteral(LString("1")))
+            )
           )
         )
       )
@@ -76,15 +82,15 @@ object TupleTest extends DefaultRunnableSpec {
       )
     },
     testM("gives nice error message on tuple length mismatch") {
-      val exp = EApplication(
+      val exp = EFunctionApplication(
         EAnnotation(
-          ELambda("inputTuple", EVariable("inputTuple")),
-          TLambda(
-            TTuple(List(TLiteral(LTInt))),
+          EFunction(List("inputTuple"), EVariable("inputTuple")),
+          TFunction(
+            List(TTuple(List(TLiteral(LTInt)))),
             TTuple(List(TLiteral(LTInt)))
           )
         ),
-        ETuple(List(ELiteral(LInt(1)), ELiteral(LInt(1))))
+        List(ETuple(List(ELiteral(LInt(1)), ELiteral(LInt(1)))))
       )
       assertM(runSynth(exp).flip)(
         equalTo(
