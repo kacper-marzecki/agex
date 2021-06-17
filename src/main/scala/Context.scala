@@ -138,8 +138,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         fail(TypeNotWellFormed(context, _type))
       }
     case TTuple(valueTypes) =>
-      // TODO: could be expressed in ZIO.foreach_
-      ZIO.forall(valueTypes)(checkIsWellFormed(context, _).as(true)).unit
+      ZIO.foreach_(valueTypes)(checkIsWellFormed(context, _))
     case TTypeRef(targetType) =>
       if (context.hasTypeDefinition(targetType)) {
         ZIO.unit
@@ -147,8 +146,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         fail(TypeNotKnown(context, targetType))
       }
     case TStruct(fieldTypes) =>
-      // TODO: could be expressed in ZIO.foreach_
-      ZIO.forall(fieldTypes.values)(checkIsWellFormed(context, _).as(true)).unit
+      ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
   }
 }
 

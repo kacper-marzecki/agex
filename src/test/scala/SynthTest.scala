@@ -117,7 +117,7 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("partial application") {
       // the following code is roughly represented in this test:
-      // let plus = fun(a, b) -> a + b
+      // let plus = fun(a) -> fun(b) -> a + b
       // let plus1 = plus(1)
       // let apply = fun(function, arg) -> function(arg)
       // apply(plus1, 1)

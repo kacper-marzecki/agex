@@ -18,6 +18,7 @@
 - remove 'case _ =>' matches
 - allow annotating only function parameter
     - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
+    - alternative: transform the annotations of args to annotation of function type at creating Function expression
 - struct field access expression (dot ?)
 - non-unary functions
 - think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 

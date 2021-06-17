@@ -68,7 +68,7 @@ def checksAgainst(
       for {
         // fold right to avoid appending the typedElement to the result list with O(n)
         result <- ZIO.foldRight(values.zip(valueTypes))(
-          SynthResult(Nil, context)
+          TEAggregation(Nil, context)
         ) { case ((expression, _type), result) =>
           for {
             (elemTyped, gamma) <- checksAgainst(
@@ -76,7 +76,7 @@ def checksAgainst(
               expression,
               _type
             )
-          } yield SynthResult(elemTyped :: result.typed, gamma)
+          } yield TEAggregation(elemTyped :: result.typed, gamma)
         }
         resultType = TTuple(result.typed.map(_._type))
       } yield (TETuple(result.typed, resultType), result.context)
@@ -303,7 +303,7 @@ def applicationSynthesizesTo(
             )
         )
         result <- ZIO.foldLeft(argAlphas.zip(exprs))(
-          SynthResult(Nil, gamma)
+          TEAggregation(Nil, gamma)
         ) { case (result, (alpha1, expr)) =>
           for {
             (elemTyped, gamma) <- checksAgainst(
@@ -311,8 +311,7 @@ def applicationSynthesizesTo(
               expr,
               TExistential(alpha1)
             )
-            // TODO its not a SynthResult anymore, just a container to fold a context through
-          } yield SynthResult(elemTyped :: result.typed, gamma)
+          } yield TEAggregation(elemTyped :: result.typed, gamma)
         }
       } yield (result.typed, TExistential(retAlpha), result.context)
     }
@@ -337,27 +336,29 @@ def applicationSynthesizesTo(
           argTypes.size == exprs.size,
           WrongArity(argTypes.size, exprs.size)
         )
-        res <- ZIO.foldLeft(exprs.zip(argTypes))(SynthResult(Nil, context)) {
+        res <- ZIO.foldLeft(exprs.zip(argTypes))(TEAggregation(Nil, context)) {
           case (acc, (arg, argType)) =>
             for {
               (typed, delta) <- checksAgainst(acc.context, arg, argType)
-            } yield (SynthResult(acc.typed :+ typed, delta))
+            } yield (TEAggregation(acc.typed :+ typed, delta))
         }
       } yield (res.typed, ret, res.context)
     case _ => fail(CannotApplyType(functionType))
   }
 }
 
-case class SynthResult(typed: List[TypedExpression], context: Context)
+/** Aggregation of typedExpressions, under a Context
+  */
+case class TEAggregation(typed: List[TypedExpression], context: Context)
 def synthesizesTo(
     context: Context,
     exprs: Iterable[Expression]
-): Eff[SynthResult] =
+): Eff[TEAggregation] =
   // fold right to avoid appending the typedElement to the result list with O(n)
-  ZIO.foldRight(exprs)(SynthResult(Nil, context)) { (elem, result) =>
+  ZIO.foldRight(exprs)(TEAggregation(Nil, context)) { (elem, result) =>
     for {
       (elemTyped, gamma) <- synthesizesTo(result.context, elem)
-    } yield SynthResult(elemTyped :: result.typed, gamma)
+    } yield TEAggregation(elemTyped :: result.typed, gamma)
   }
 
 // Figure 11. Algorithmic typing
