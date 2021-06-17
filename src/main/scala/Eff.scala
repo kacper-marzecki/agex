@@ -18,6 +18,7 @@ enum AppError extends RuntimeException {
   case MissingFields(fields: List[String])
   case TupleSizesDontMatch(a: Type.TTuple, b: Type.TTuple)
   case Unexpected(label: String)
+  case WrongArity(expected: Int, actual: Int)
 }
 
 type Env = ZEnv & Has[CompilerState]

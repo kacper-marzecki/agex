@@ -49,13 +49,6 @@ def anyM[R, E, A](
     else test(elem)
   )
 
-// def allM[R, E, A](collection: Iterable[A])
-
-// def getKeys[A, B](map: Map[A, B], keys: Iterable[A]): Map[A, B] = {
-//   val keySet = keys.toSet
-//   map.filter { case (k, v) => keySet.contains(k) }
-// }
-
 case class ExtractionResult[A, B](
     included: Map[A, B],
     excluded: Map[A, B],
@@ -80,3 +73,10 @@ def extractKeys[A, B](
   })
   ExtractionResult(included.toMap, excluded.toMap, notFound.toSet)
 }
+
+def split[A, B](xs: List[(A, B)]): (List[A], List[B]) =
+  xs.foldRight((List.empty[A], List.empty[B])) {
+    case ((a, b), (accA, accB)) => {
+      (a :: accA, b :: accB)
+    }
+  }

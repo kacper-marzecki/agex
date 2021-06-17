@@ -23,20 +23,20 @@ object SynthTest extends DefaultRunnableSpec {
       )
     },
     testM("Id application with string gives back string") {
-      val expr = EApplication(idFunction, litString)
+      val expr = EFunctionApplication(idFunction, List(litString))
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTString))
       )
     },
     testM("Id application with boolean gives back boolean") {
-      val expr = EApplication(idFunction, litBool)
+      val expr = EFunctionApplication(idFunction, List(litBool))
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTBool))
       )
     },
     testM("Id has a x -> x type") {
       assertM(runSynth(idFunction))(
-        equalTo(TLambda(TExistential("t1"), TExistential("t1")))
+        equalTo(TFunction(List(TExistential("t1")), TExistential("t1")))
       )
     },
     testM("Tuple type is correctly inferred") {
@@ -45,18 +45,18 @@ object SynthTest extends DefaultRunnableSpec {
       )
     },
     testM("tuple is created by application of a lambda") {
-      val expr = EApplication(
-        ELambda("x", ETuple(List(EVariable("x"), EVariable("x")))),
-        litBool
+      val expr = EFunctionApplication(
+        EFunction(List("x"), ETuple(List(EVariable("x"), EVariable("x")))),
+        List(litBool)
       )
       assertM(runSynth(expr))(
         equalTo(TTuple(List(TLiteral(LTBool), TLiteral(LTBool))))
       )
     },
     testM("nested tuple is created by application of a lambda") {
-      val expr = EApplication(
-        ELambda(
-          "x",
+      val expr = EFunctionApplication(
+        EFunction(
+          List("x"),
           ETuple(
             List(
               EVariable("x"),
@@ -64,7 +64,7 @@ object SynthTest extends DefaultRunnableSpec {
             )
           )
         ),
-        litBool
+        List(litBool)
       )
       assertM(runSynth(expr))(
         equalTo(
@@ -81,7 +81,7 @@ object SynthTest extends DefaultRunnableSpec {
       val expr = ELet(
         "idFunction",
         idFunction,
-        EApplication(EVariable("idFunction"), strBoolTuple)
+        EFunctionApplication(EVariable("idFunction"), List(strBoolTuple))
       )
       assertM(runSynth(expr))(
         equalTo(
@@ -93,7 +93,7 @@ object SynthTest extends DefaultRunnableSpec {
       val expr = ELet(
         "someFunction",
         annotatedId,
-        EApplication(EVariable("someFunction"), litBool)
+        EFunctionApplication(EVariable("someFunction"), List(litBool))
       )
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTBool))
@@ -101,12 +101,15 @@ object SynthTest extends DefaultRunnableSpec {
     },
     testM("function can be curried") {
       val plusFunction = EAnnotation(
-        ELambda("a", ELambda("b", ELiteral(LInt(1)))),
-        TLambda(TLiteral(LTInt), TLambda(TLiteral(LTInt), TLiteral(LTInt)))
+        EFunction(List("a"), EFunction(List("b"), ELiteral(LInt(1)))),
+        TFunction(
+          List(TLiteral(LTInt)),
+          TFunction(List(TLiteral(LTInt)), TLiteral(LTInt))
+        )
       )
-      val expr = EApplication(
-        EApplication(plusFunction, ELiteral(LInt(1))),
-        ELiteral(LInt(1))
+      val expr = EFunctionApplication(
+        EFunctionApplication(plusFunction, List(ELiteral(LInt(1)))),
+        List(ELiteral(LInt(1)))
       )
       assertM(runSynth(expr))(
         equalTo(TLiteral(LTInt))
@@ -119,27 +122,36 @@ object SynthTest extends DefaultRunnableSpec {
       // let apply = fun(function, arg) -> function(arg)
       // apply(plus1, 1)
       val plusFunction = EAnnotation(
-        ELambda("a", ELambda("b", ELiteral(LInt(1)))),
-        TLambda(TLiteral(LTInt), TLambda(TLiteral(LTInt), TLiteral(LTInt)))
+        EFunction(List("a"), EFunction(List("b"), ELiteral(LInt(1)))),
+        TFunction(
+          List(TLiteral(LTInt)),
+          TFunction(List(TLiteral(LTInt)), TLiteral(LTInt))
+        )
       )
       val expr = ELet(
         "plus",
         plusFunction,
         ELet(
           "plus1",
-          EApplication(EVariable("plus"), ELiteral(LInt(1))),
+          EFunctionApplication(EVariable("plus"), List(ELiteral(LInt(1)))),
           ELet(
             "apply",
-            ELambda(
-              "function",
-              ELambda(
-                "arg",
-                EApplication(EVariable("function"), EVariable("arg"))
+            EFunction(
+              List("function"),
+              EFunction(
+                List("arg"),
+                EFunctionApplication(
+                  EVariable("function"),
+                  List(EVariable("arg"))
+                )
               )
             ),
-            EApplication(
-              EApplication(EVariable("apply"), EVariable("plus1")),
-              ELiteral(LInt(1))
+            EFunctionApplication(
+              EFunctionApplication(
+                EVariable("apply"),
+                List(EVariable("plus1"))
+              ),
+              List(ELiteral(LInt(1)))
             )
           )
         )
@@ -153,17 +165,17 @@ object SynthTest extends DefaultRunnableSpec {
         Vector(
           CTypedVariable(
             "+",
-            TLambda(
-              TLiteral(LTInt),
-              TLambda(TLiteral(LTInt), TLiteral(LTInt))
+            TFunction(
+              List(TLiteral(LTInt)),
+              TFunction(List(TLiteral(LTInt)), TLiteral(LTInt))
             )
           )
         )
       )
 
-      val exp = EApplication(
-        EApplication(EVariable("+"), ELiteral(LInt(1))),
-        ELiteral(LInt(1))
+      val exp = EFunctionApplication(
+        EFunctionApplication(EVariable("+"), List(ELiteral(LInt(1)))),
+        List(ELiteral(LInt(1)))
       )
       assertM(runSynth(exp, ctx))(
         equalTo(TLiteral(LTInt))
@@ -174,9 +186,9 @@ object SynthTest extends DefaultRunnableSpec {
         Vector(
           CTypedVariable(
             "+",
-            TLambda(
-              TLiteral(LTInt),
-              TLambda(TLiteral(LTInt), TLiteral(LTInt))
+            TFunction(
+              List(TLiteral(LTInt)),
+              TFunction(List(TLiteral(LTInt)), TLiteral(LTInt))
             )
           )
         )
@@ -189,14 +201,14 @@ object SynthTest extends DefaultRunnableSpec {
         ELiteral(LString("asd")),
         ELet(
           "b",
-          ELambda(
-            "a",
-            EApplication(
-              EApplication(EVariable("+"), ELiteral(LInt(1))),
-              EVariable("a")
+          EFunction(
+            List("a"),
+            EFunctionApplication(
+              EFunctionApplication(EVariable("+"), List(ELiteral(LInt(1)))),
+              List(EVariable("a"))
             )
           ),
-          EApplication(EVariable("b"), ELiteral(LInt(1)))
+          EFunctionApplication(EVariable("b"), List(ELiteral(LInt(1))))
         )
       )
       val eff = runSynth(exp, ctx).flip
@@ -261,11 +273,14 @@ object SynthTest extends DefaultRunnableSpec {
         TTypeRef("Integer"),
         ETypeAlias(
           "kek",
-          TLambda(TTypeRef("asd"), TLiteral(LTBool)),
+          TFunction(List(TTypeRef("asd")), TLiteral(LTBool)),
           ELet(
             "fun",
-            EAnnotation(ELambda("a", ELiteral(LBool(false))), TTypeRef("kek")),
-            EApplication(EVariable("fun"), ELiteral(LInt(1)))
+            EAnnotation(
+              EFunction(List("a"), ELiteral(LBool(false))),
+              TTypeRef("kek")
+            ),
+            EFunctionApplication(EVariable("fun"), List(ELiteral(LInt(1))))
           )
         )
       )

@@ -11,6 +11,7 @@ import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
+import javax.imageio.plugins.tiff.TIFFField
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -41,19 +42,23 @@ def checksAgainst(
       )
     }
     //Decl→I
-    case (ELambda(arg, body), TLambda(argType, bodyType)) => {
-      val typedVar = CTypedVariable(arg, argType)
+    case (EFunction(args, body), TFunction(argTypes, bodyType)) => {
+      val typedVars = args.zip(argTypes).map(CTypedVariable.apply.tupled)
       for {
-        gamma              <- context.add(typedVar)
+        _ <- assertTrue(
+          args.size == argTypes.size,
+          WrongArity(argTypes.size, args.size)
+        )
+        gamma              <- context.addAll(typedVars)
         (typedBody, theta) <- checksAgainst(gamma, body, bodyType)
-        delta              <- theta.drop(typedVar)
-      } yield (TELambda(arg, typedBody, _type), delta)
+        delta              <- theta.drop(typedVars)
+      } yield (TEFunction(args, typedBody, _type), delta)
     }
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
-      val gamma    = context.add(variable)
       for {
+        gamma          <- context.add(variable)
         (typed, theta) <- checksAgainst(gamma, expression, quantType)
         delta          <- theta.drop(variable)
       } yield (typed, delta)
@@ -112,13 +117,11 @@ def substitution(
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
-    case TLambda(arg, ret) =>
+    case TFunction(args, ret) =>
       for {
-        (argType, retType) <- ZIO.tupled(
-          substitution(context, arg, alpha, b),
-          substitution(context, ret, alpha, b)
-        )
-      } yield TLambda(argType, retType)
+        argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        retType  <- substitution(context, ret, alpha, b)
+      } yield TFunction(argTypes, retType)
     case TTypeRef(name) =>
       context
         .getTypeDefinition(name)
@@ -141,8 +144,8 @@ def occursIn(
   a match {
     case TLiteral(_)     => succeed(false)
     case TVariable(name) => succeed(alpha == name)
-    case TLambda(arg, ret) =>
-      anyM(List(arg, ret), occursIn(context, alpha, _))
+    case TFunction(args, ret) =>
+      anyM(ret :: args, occursIn(context, alpha, _))
     case TQuantification(beta, t) => {
       if (alpha == beta) {
         return succeed(true);
@@ -166,32 +169,36 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
     _ <- checkIsWellFormed(context, a)
     _ <- checkIsWellFormed(context, b)
     delta <- (a, b) match {
-      //≤Unit
+      //<:Unit
       case (TLiteral(literalA), TLiteral(literalB)) => {
         assertTrue(literalA == literalB, TypesNotEqual(a, b))
           .as(context)
       }
-      //≤Var
+      //<:Var
       case (TVariable(nameA), TVariable(nameB)) => {
         checkIsWellFormed(context, a) *>
           assertTrue(nameA == nameB, TypeNamesNotEqual(nameA, nameB))
             .as(context)
       }
-      //≤Exvar
+      //<:Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
         checkIsWellFormed(context, a).as(context)
       }
-      //≤->
-      case (TLambda(arg1, ret1), TLambda(arg2, ret2)) => {
+      //<:->
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
         for {
-          theta <- subtype(context, arg1, arg2)
-          (a, b) <- ZIO.tupled(
-            applyContext(ret1, theta),
-            applyContext(ret2, theta)
+          _ <- assertTrue(
+            args1.size == args2.size,
+            WrongArity(args2.size, args1.size)
           )
+          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+            case (delta, (arg1, arg2)) =>
+              subtype(delta, arg1, arg2)
+          }
+          a     <- applyContext(ret1, theta)
+          b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
-      }
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -214,13 +221,12 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           }
         }
       }
-      //≤∀L
+      //<:∀L
       case (TQuantification(name, quantType), _) => {
         for {
           alpha <- CompilerState.makeExistential
-          gamma = context
-            .add(CMarker(alpha))
-            .add(CExistential(alpha))
+          gamma <- context
+            .addAll(CMarker(alpha), CExistential(alpha))
           substitutedQuantType <- substitution(
             context,
             quantType,
@@ -231,13 +237,14 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           result <- delta.drop(CMarker(alpha))
         } yield result
       }
-      //≤∀R
-      case (_, TQuantification(name, quantType)) => {
-        val theta = context.add(CVariable(name))
-        subtype(theta, a, quantType)
-          .flatMap(_.drop(CVariable(name)))
-      }
-      //≤InstatiateL
+      //<:∀R
+      case (_, TQuantification(name, quantType)) =>
+        for {
+          theta <- context.add(CVariable(name))
+          gamma <- subtype(theta, a, quantType)
+          delta <- gamma.drop(CVariable(name))
+        } yield delta
+      //<:InstantiateL
       case (TExistential(name), _) => {
         assertNotM(
           occursIn(context, name, b),
@@ -245,7 +252,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateL(context, name, b)
       }
-      //≤InstantiateR
+      //<:InstantiateR
       case (_, TExistential(name)) => {
         assertNotM(
           occursIn(context, name, a),
@@ -269,55 +276,75 @@ def literalSynthesizesTo(literal: Literal): LiteralType = {
 }
 
 //Fig. 11
-// returns (typed expression of the argument, return type of the function, context)
+// returns (typed argument expressions, return type of the function, context)
 def applicationSynthesizesTo(
     context: Context,
-    _type: Type,
-    expr: Expression
-): Eff[(TypedExpression, Type, Context)] = {
-  _type match {
-    //alphaApp
+    functionType: Type,
+    exprs: List[Expression]
+): Eff[(List[TypedExpression], Type, Context)] = {
+  functionType match {
     case TExistential(name) => {
       for {
-        alpha1 <- CompilerState.makeExistential
-        alpha2 <- CompilerState.makeExistential
+        retAlpha  <- CompilerState.makeExistential
+        argAlphas <- ZIO.foreach(exprs)(_ => CompilerState.makeExistential)
         gamma <- context.insertInPlace(
           CExistential(name),
-          List(
-            CExistential(alpha2),
-            CExistential(alpha1),
-            CSolved(
-              name,
-              TLambda(
-                TExistential(alpha1),
-                TExistential(alpha2)
+          CExistential(retAlpha) ::
+            // reverse to place the first argument α^ to the right in the context
+            argAlphas.reverse.map(CExistential(_)) :::
+            List(
+              CSolved(
+                name,
+                TFunction(
+                  argAlphas.map(TExistential(_)),
+                  TExistential(retAlpha)
+                )
               )
             )
-          )
         )
-        (typedExpr, delta) <- checksAgainst(gamma, expr, TExistential(alpha1))
-      } yield (typedExpr, TExistential(alpha2), delta)
+        result <- ZIO.foldLeft(argAlphas.zip(exprs))(
+          SynthResult(Nil, gamma)
+        ) { case (result, (alpha1, expr)) =>
+          for {
+            (elemTyped, gamma) <- checksAgainst(
+              result.context,
+              expr,
+              TExistential(alpha1)
+            )
+            // TODO its not a SynthResult anymore, just a container to fold a context through
+          } yield SynthResult(elemTyped :: result.typed, gamma)
+        }
+      } yield (result.typed, TExistential(retAlpha), result.context)
     }
-    //ForallApp
+    //∀App
     case TQuantification(name, quantType) => {
       for {
         alpha <- CompilerState.makeExistential
-        gamma = context.add(CExistential(alpha))
+        gamma <- context.add(CExistential(alpha))
         substitutedType <- substitution(
           context,
           quantType,
           name,
           TExistential(alpha)
         )
-        result <- applicationSynthesizesTo(gamma, substitutedType, expr)
+        result <- applicationSynthesizesTo(gamma, substitutedType, exprs)
       } yield result
     }
-    //App
-    case TLambda(arg, ret) =>
+    //→App
+    case TFunction(argTypes, ret) =>
       for {
-        (typedExpr, delta) <- checksAgainst(context, expr, arg)
-      } yield (typedExpr, ret, delta)
-    case _ => fail(CannotApplyType(_type))
+        _ <- assertTrue(
+          argTypes.size == exprs.size,
+          WrongArity(argTypes.size, exprs.size)
+        )
+        res <- ZIO.foldLeft(exprs.zip(argTypes))(SynthResult(Nil, context)) {
+          case (acc, (arg, argType)) =>
+            for {
+              (typed, delta) <- checksAgainst(acc.context, arg, argType)
+            } yield (SynthResult(acc.typed :+ typed, delta))
+        }
+      } yield (res.typed, ret, res.context)
+    case _ => fail(CannotApplyType(functionType))
   }
 }
 
@@ -333,6 +360,7 @@ def synthesizesTo(
     } yield SynthResult(elemTyped :: result.typed, gamma)
   }
 
+// Figure 11. Algorithmic typing
 def synthesizesTo(
     context: Context,
     expr: Expression
@@ -373,21 +401,26 @@ def synthesizesTo(
         delta
       )
     }
-    //->I=>
-    case ELambda(arg, ret) => {
+    //→I⇒
+    case EFunction(args, ret) => {
       for {
-        alpha <- CompilerState.makeExistential
-        beta  <- CompilerState.makeExistential
-        gamma <-
-          context
-            .add(CExistential(alpha))
-            .add(CExistential(beta))
-            .add(CTypedVariable(arg, TExistential(alpha)))
-        (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(beta))
-        delta <- theta.drop(CTypedVariable(arg, TExistential(alpha)))
-        functionType = TLambda(TExistential(alpha), TExistential(beta))
+        (sigmas, sigmaVariables) <- ZIO
+          .foreach(args)(arg =>
+            CompilerState.makeExistential
+              .map(sigma => (sigma, CTypedVariable(arg, TExistential(sigma))))
+          )
+          .map(it => split(it))
+        tau <- CompilerState.makeExistential
+        gamma <- context.addAll(
+          sigmas.map(CExistential(_)) :::
+            List(CExistential(tau)) :::
+            sigmaVariables
+        )
+        (typedRet, theta) <- checksAgainst(gamma, ret, TExistential(tau))
+        delta             <- theta.drop(sigmaVariables)
+        functionType = TFunction(sigmas.map(TExistential(_)), TExistential(tau))
       } yield (
-        TELambda(arg, typedRet, functionType),
+        TEFunction(args, typedRet, functionType),
         delta
       )
     }
@@ -415,18 +448,21 @@ def synthesizesTo(
         delta            <- phi.insertInPlace(exprVariable, List())
       } yield (TELet(name, exprTyped, bodyTyped, bodyTyped._type), delta)
     }
-    //->E
-    case EApplication(fun, arg) => {
+    //→E
+    case EFunctionApplication(fun, args) => {
       for {
         (funTyped, theta) <- synthesizesTo(context, fun)
         appliedFunType    <- applyContext(funTyped._type, theta)
-        (argTyped, applicationType, delta) <-
+        (argsTyped, applicationType, delta) <-
           applicationSynthesizesTo(
             theta,
             appliedFunType,
-            arg
+            args
           )
-      } yield (TEApplication(funTyped, argTyped, applicationType), delta)
+      } yield (
+        TEFunctionApplication(funTyped, argsTyped, applicationType),
+        delta
+      )
     }
   }
 }

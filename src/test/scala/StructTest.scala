@@ -39,16 +39,16 @@ object StructTest extends DefaultRunnableSpec {
       )
     },
     testM("generic struct returned from function") {
-      val expr = EApplication(
+      val expr = EFunctionApplication(
         EAnnotation(
-          ELambda(
-            "a",
+          EFunction(
+            List("a"),
             EStruct(Map("A" -> EVariable("a"), "B" -> ELiteral(LBool(false))))
           ),
           TQuantification(
             "a",
-            TLambda(
-              TVariable("a"),
+            TFunction(
+              List(TVariable("a")),
               TStruct(
                 Map[String, Type](
                   "A" -> TVariable("a"),
@@ -58,7 +58,7 @@ object StructTest extends DefaultRunnableSpec {
             )
           )
         ),
-        ELiteral(LString("asd"))
+        List(ELiteral(LString("asd")))
       )
 
       assertM(runSynth(expr))(
@@ -82,17 +82,19 @@ object StructTest extends DefaultRunnableSpec {
       val expr = ELet(
         "lambda",
         EAnnotation(
-          ELambda("a", ELiteral(LBool(false))),
-          TLambda(
-            TStruct(
-              Map[String, Type](
-                "A" -> TLiteral(LTString)
+          EFunction(List("a"), ELiteral(LBool(false))),
+          TFunction(
+            List(
+              TStruct(
+                Map[String, Type](
+                  "A" -> TLiteral(LTString)
+                )
               )
             ),
             TLiteral(LTBool)
           )
         ),
-        EApplication(EVariable("lambda"), struct)
+        EFunctionApplication(EVariable("lambda"), List(struct))
       )
 
       assertM(runSynth(expr))(
@@ -108,19 +110,21 @@ object StructTest extends DefaultRunnableSpec {
       val expr = ELet(
         "lambda",
         EAnnotation(
-          ELambda("a", ELiteral(LBool(false))),
-          TLambda(
-            TStruct(
-              Map[String, Type](
-                "A" -> TLiteral(LTString),
-                "B" -> TLiteral(LTBool),
-                "C" -> TLiteral(LTFloat)
+          EFunction(List("a"), ELiteral(LBool(false))),
+          TFunction(
+            List(
+              TStruct(
+                Map[String, Type](
+                  "A" -> TLiteral(LTString),
+                  "B" -> TLiteral(LTBool),
+                  "C" -> TLiteral(LTFloat)
+                )
               )
             ),
             TLiteral(LTBool)
           )
         ),
-        EApplication(EVariable("lambda"), struct)
+        EFunctionApplication(EVariable("lambda"), List(struct))
       )
 
       assertM(runSynth(expr).flip)(
@@ -136,17 +140,19 @@ object StructTest extends DefaultRunnableSpec {
       val expr = ELet(
         "lambda",
         EAnnotation(
-          ELambda("a", ELiteral(LBool(false))),
-          TLambda(
-            TStruct(
-              Map[String, Type](
-                "A" -> TLiteral(LTBool)
+          EFunction(List("a"), ELiteral(LBool(false))),
+          TFunction(
+            List(
+              TStruct(
+                Map[String, Type](
+                  "A" -> TLiteral(LTBool)
+                )
               )
             ),
             TLiteral(LTBool)
           )
         ),
-        EApplication(EVariable("lambda"), struct)
+        EFunctionApplication(EVariable("lambda"), List(struct))
       )
 
       assertM(runSynth(expr).flip)(
