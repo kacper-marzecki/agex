@@ -135,7 +135,6 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
                   )
                 )
               )
-              // TODO: idea: maybe we could fold the context over a list of arguments, as they are independent of each other
               theta             <- instantiateL(gamma, alpha1, arg)
               appliedReturnType <- applyContext(ret, theta)
               delta <- instantiateR(theta, alpha2, appliedReturnType)

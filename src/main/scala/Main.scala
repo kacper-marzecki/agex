@@ -51,9 +51,12 @@ def checksAgainst(
       } yield (TELambda(arg, typedBody, _type), delta)
     }
     case (EFunction(args, body), TFunction(argTypes, bodyType)) => {
-      // TODO: perform an arity check
       val typedVars = args.zip(argTypes).map(CTypedVariable.apply.tupled)
       for {
+        _ <- assertTrue(
+          args.size == argTypes.size,
+          WrongArity(argTypes.size, args.size)
+        )
         gamma              <- context.addAll(typedVars)
         (typedBody, theta) <- checksAgainst(gamma, body, bodyType)
         delta              <- theta.drop(typedVars)
@@ -208,8 +211,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         } yield delta
       }
       case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
-        //TODO: Check arities
         for {
+          _ <- assertTrue(
+            args1.size == args2.size,
+            WrongArity(args2.size, args1.size)
+          )
           theta <- ZIO.foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
               subtype(delta, arg1, arg2)
@@ -350,9 +356,12 @@ def applicationSynthesizesTo(
       } yield result
     }
     //→App
-    // TODO: check arity
     case TFunction(argTypes, ret) =>
       for {
+        _ <- assertTrue(
+          argTypes.size == exprs.size,
+          WrongArity(argTypes.size, exprs.size)
+        )
         res <- ZIO.foldLeft(exprs.zip(argTypes))(SynthResult(Nil, context)) {
           case (acc, (arg, argType)) =>
             for {

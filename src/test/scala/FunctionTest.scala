@@ -144,11 +144,19 @@ object FunctionTest extends DefaultRunnableSpec {
         equalTo(AppError.TypeNotApplicableToLiteral(LTInt, LBool(false)))
       )
     },
-    test("detects arity mismatch") {
-      assert(1)(equalTo(1))
+    testM("detects arity mismatch") {
+      val expr = EFunctionApplication(
+        aPlusBPlusC,
+        List(ELiteral(LInt(1)), ELiteral(LInt(1)))
+      )
+      assertM(runSynth(expr, stdCtx).flip)(equalTo(AppError.WrongArity(3, 2)))
     },
-    test("nullary functions work") {
-      assert(1)(equalTo(1))
+    testM("nullary functions work") {
+      val expr = EFunctionApplication(
+        EFunction(Nil, ELiteral(LInt(1))),
+        Nil
+      )
+      assertM(runSynth(expr))(equalTo(TLiteral(LTInt)))
     }
   )
 }

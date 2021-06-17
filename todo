@@ -24,3 +24,4 @@
 - if expression 
 - NOT_IMPLEMENTED expression, akin to ??? in scala
 - unify apis that take context as an argument - either all take it as a first arg, or the last
+- maybe its possible to abstract arity check
