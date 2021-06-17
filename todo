@@ -20,11 +20,12 @@
     - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
     - alternative: transform the annotations of args to annotation of function type at creating Function expression
 - struct field access expression (dot ?)
-- non-unary functions
 - think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
 - if expression 
 - NOT_IMPLEMENTED expression, akin to ??? in scala
 - unify apis that take context as an argument - either all take it as a first arg, or the last
 - maybe its possible to abstract arity check
-- add primitive list type 
-- add void primitive type
+- add list primitive 
+- add atom primitive
+- add nil primitive
+- add sum types 
