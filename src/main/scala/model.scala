@@ -6,6 +6,7 @@ object Literal {
   case class LFloat(it: Float)   extends Literal
   case class LBool(it: Boolean)  extends Literal
   case class LAtom(it: String)   extends Literal
+  case object LNil               extends Literal
   case object LUnit              extends Literal
 }
 
@@ -41,6 +42,7 @@ object LiteralType {
   case object LTFloat  extends LiteralType
   case object LTAtom   extends LiteralType
   case object LTBool   extends LiteralType
+  case object LTNil    extends LiteralType
 }
 
 /** When adding a new Type:
