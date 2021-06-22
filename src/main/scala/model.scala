@@ -27,7 +27,7 @@ object Expression {
   case class EFunction(args: List[String], body: Expression) extends Expression
   case class EFunctionApplication(fun: Expression, args: List[Expression])
       extends Expression
-  case class EIf(condition: Expression, ifTrue: Expression, ifFalse: Expression)
+  case class EIf(condition: Expression, ifTrue: Expression, ifFalse: Expression) extends Expression
 }
 
 sealed trait LiteralType

@@ -11,9 +11,6 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.runSynth
-import java.util.function.LongBinaryOperator
-import javax.swing.plaf.metal.MetalIconFactory.TreeLeafIcon
-import java.security.spec.EdDSAParameterSpec
 
 object FunctionTest extends DefaultRunnableSpec {
   val stdCtx = Context(

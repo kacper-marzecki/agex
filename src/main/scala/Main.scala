@@ -492,7 +492,7 @@ def synthesizesTo(
           ifTrueTyped._type
         )
       } yield (
-        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, ifFalseTyped._type),
+        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, ifTrueTyped._type),
         delta
       )
     }
