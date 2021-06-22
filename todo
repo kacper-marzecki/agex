@@ -1,8 +1,10 @@
-- revisit instantiateL and instantiateR algo
-- product types:
+- Housekeeping: 
+    - unify apis that take context as an argument - either all take it as a first arg, or the last
+    - revisit instantiateL and instantiateR algo
+    - maybe its possible to abstract the arity check
+    - think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
+- Nominal types: 
     - think out: 
-        - Product type literal
-        - How to construct a anonymous product type (maybe something akin to a record)
         - How to construct a named type 
         - How would we handle structural and nominal typing 
             - proposition: 
@@ -12,25 +14,29 @@
                 end
                 a = %User{}
                 [:__struct__, :age, :name] = Map.keys a 
-             ```
-             Nominal types could be implemented using the special :__struct__ tag in a structural type
-
+                ```
+                Nominal types could be implemented using the special :__struct__ tag in a structural type
 - remove 'case _ =>' matches
-- allow annotating only function parameter
-    - maybe ELambda could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
-    - alternative: transform the annotations of args to annotation of function type at creating Function expression
-- struct field access expression (dot ?)
-- think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
+- Functions:
+    - allow annotating only function parameter
+        - maybe EFunction could accept a PlainArg(String) or AnnotatedArg(String, Type) ?
+        - alternative: transform the annotations of args to annotation of function type at creating Function expression
+    - named parameters
+    - optional parameters 
 - if expression 
     - nice error when 2 branches return different types
     - automatically finding a supertype of ifFalse and ifTrue branches 
-- NOT_IMPLEMENTED expression, akin to ??? in scala
-- unify apis that take context as an argument - either all take it as a first arg, or the last
-- maybe its possible to abstract arity check
-- add list primitive 
-- add atom primitive
-- add nil primitive
-- add sum types 
-    - maybe model them as just set of types ?
-- think out: adding `any` type ? 
-- think out function overloading 
+- Types:
+    - think out:  general catch-all types over e.g. Atom, and a literal formed from a value 
+        - something similar to atom() and :some_atom in typespecs 
+    - add sum types 
+        - maybe model them as just set of types ?
+    - think out: adding `any` type ? 
+    - think out: representing optionality in product types { optField ?: Int. reqField :  } 
+- General: 
+    - struct field access expression (dot ?)
+        - maybe it should not be specific to struct
+        - maybe struct field access could be expressed as an extension function 'under the hood' ? 
+    - NOT_IMPLEMENTED expression, akin to ??? in scala
+    - add list primitive 
+    - add nil primitive
