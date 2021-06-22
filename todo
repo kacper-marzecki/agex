@@ -39,4 +39,3 @@
         - maybe struct field access could be expressed as an extension function 'under the hood' ? 
     - NOT_IMPLEMENTED expression, akin to ??? in scala
     - add list primitive 
-    - add nil primitive
