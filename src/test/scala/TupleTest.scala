@@ -10,8 +10,6 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.runSynth
-import scala.jdk.FunctionWrappers.RichToLongFunctionAsFunction1
-import java.security.spec.EdDSAParameterSpec
 
 object TupleTest extends DefaultRunnableSpec {
   val aToTupleOfAABool = EAnnotation(

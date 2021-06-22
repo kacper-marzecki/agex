@@ -83,6 +83,18 @@ def checksAgainst(
     }
     case (_, TTypeRef(name)) =>
       context.getTypeDefinition(name).flatMap(checksAgainst(context, expr, _))
+    case (EIf(condition, ifTrue, ifFalse), _type) => {
+      for {
+        _ <- prettyPrint("EIf", "ChecksAgainst")
+        (conditionTyped, gamma) <- checksAgainst(
+          context,
+          ifTrue,
+          TLiteral(LTBool)
+        )
+        (ifTrueTyped, theta)  <- checksAgainst(gamma, ifTrue, _type)
+        (ifFalseTyped, delta) <- checksAgainst(theta, ifFalse, _type)
+      } yield (TEIf(conditionTyped, ifTrueTyped, ifFalseTyped, _type), delta)
+    }
     //DeclSub
     case _ => {
       for {
@@ -462,6 +474,25 @@ def synthesizesTo(
           )
       } yield (
         TEFunctionApplication(funTyped, argsTyped, applicationType),
+        delta
+      )
+    }
+    case EIf(condition, ifTrue, ifFalse) => {
+      for {
+        (typedCondition, delta) <- checksAgainst(
+          context,
+          condition,
+          TLiteral(LTBool)
+        )
+        // TODO: find a common supertype ?
+        (ifTrueTyped, theta) <- synthesizesTo(delta, ifTrue)
+        (ifFalseTyped, delta) <- checksAgainst(
+          theta,
+          ifFalse,
+          ifTrueTyped._type
+        )
+      } yield (
+        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, ifTrueTyped._type),
         delta
       )
     }

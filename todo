@@ -22,6 +22,8 @@
 - struct field access expression (dot ?)
 - think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
 - if expression 
+    - nice error when 2 branches return different types
+    - automatically finding a supertype of ifFalse and ifTrue branches 
 - NOT_IMPLEMENTED expression, akin to ??? in scala
 - unify apis that take context as an argument - either all take it as a first arg, or the last
 - maybe its possible to abstract arity check
@@ -29,3 +31,6 @@
 - add atom primitive
 - add nil primitive
 - add sum types 
+    - maybe model them as just set of types ?
+- think out: adding `any` type ? 
+- think out function overloading 
