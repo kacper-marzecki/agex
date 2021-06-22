@@ -283,6 +283,7 @@ def literalSynthesizesTo(literal: Literal): LiteralType = {
     case LInt(_)    => LTInt
     case LFloat(_)  => LTFloat
     case LBool(_)   => LTBool
+    case LAtom(_)   => LTAtom
     case LUnit      => LTUnit
   }
 }

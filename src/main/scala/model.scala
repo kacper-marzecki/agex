@@ -5,6 +5,7 @@ object Literal {
   case class LInt(it: Int)       extends Literal
   case class LFloat(it: Float)   extends Literal
   case class LBool(it: Boolean)  extends Literal
+  case class LAtom(it: String)   extends Literal
   case object LUnit              extends Literal
 }
 
@@ -27,7 +28,8 @@ object Expression {
   case class EFunction(args: List[String], body: Expression) extends Expression
   case class EFunctionApplication(fun: Expression, args: List[Expression])
       extends Expression
-  case class EIf(condition: Expression, ifTrue: Expression, ifFalse: Expression) extends Expression
+  case class EIf(condition: Expression, ifTrue: Expression, ifFalse: Expression)
+      extends Expression
 }
 
 sealed trait LiteralType
@@ -37,6 +39,7 @@ object LiteralType {
   case object LTString extends LiteralType
   case object LTInt    extends LiteralType
   case object LTFloat  extends LiteralType
+  case object LTAtom   extends LiteralType
   case object LTBool   extends LiteralType
 }
 
