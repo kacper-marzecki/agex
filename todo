@@ -37,5 +37,7 @@
     - struct field access expression (dot ?)
         - maybe it should not be specific to struct
         - maybe struct field access could be expressed as an extension function 'under the hood' ? 
+        - think out: field access functions ~ haskell
+        - think out: as fields are atoms, maybe clojure could have some interesting ideas: e.g. atoms as functions over structs
     - NOT_IMPLEMENTED expression, akin to ??? in scala
     - add list primitive 
