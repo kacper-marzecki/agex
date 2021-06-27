@@ -63,6 +63,11 @@ def checksAgainst(
         delta          <- theta.drop(variable)
       } yield (typed, delta)
     }
+    case (expression, it: TMulQuantification) =>
+      checksAgainst(context, expression, it.desugar).map {
+        // restoring the original TMulQuantification type
+        case (typed, delta) => (typed.modify(_._type).setTo(it), delta)
+      }
     case (ETuple(values), TTuple(valueTypes))
         if values.length == valueTypes.length => {
       for {
@@ -126,6 +131,16 @@ def substitution(
         substitution(context, quantType, alpha, b).map(TQuantification(name, _))
       }
     }
+    // 1:1 port of TQuantification
+    case TMulQuantification(names, quantType) => {
+      if (names.contains(alpha)) {
+        succeed(TMulQuantification(names, b))
+      } else {
+        substitution(context, quantType, alpha, b).map(
+          TMulQuantification(names, _)
+        )
+      }
+    }
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
@@ -165,7 +180,8 @@ def occursIn(
         return occursIn(context, alpha, t);
       }
     }
-    case TExistential(name) => succeed(alpha == name)
+    case it: TMulQuantification => occursIn(context, alpha, it.desugar)
+    case TExistential(name)     => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
     case TTypeRef(name) =>

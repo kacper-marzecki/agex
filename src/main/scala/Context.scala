@@ -131,6 +131,8 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       context
         .add(CVariable(alpha))
         .flatMap(checkIsWellFormed(_, a))
+    case it: TMulQuantification =>
+      checkIsWellFormed(context, it.desugar)
     case TExistential(name) =>
       if (context.hasExistential(name) || context.getSolved(name).isDefined) {
         ZIO.unit
@@ -166,6 +168,9 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TQuantification(name, quantType) => {
       applyContext(quantType, context).map(TQuantification(name, _))
     }
+    case TMulQuantification(names, quantType) =>
+      // 1:1 TQuantification port
+      applyContext(quantType, context).map(TMulQuantification(names, _))
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(applyContext(_, context)).map(TTuple(_))
     case TTypeRef(name) =>

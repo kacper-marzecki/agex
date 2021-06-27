@@ -42,14 +42,11 @@ object FunctionTest extends DefaultRunnableSpec {
       List("a", "b"),
       ETuple(List(EVariable("a"), EVariable("b")))
     ),
-    TQuantification(
-      "A",
-      TQuantification(
-        "B",
-        TFunction(
-          List(TVariable("A"), TVariable("B")),
-          TTuple(List(TVariable("A"), TVariable("B")))
-        )
+    TMulQuantification(
+      Set("A", "B"),
+      TFunction(
+        List(TVariable("A"), TVariable("B")),
+        TTuple(List(TVariable("A"), TVariable("B")))
       )
     )
   )
@@ -90,14 +87,11 @@ object FunctionTest extends DefaultRunnableSpec {
       val expr = genericTwoTupleConstructor
       assertM(runSynth(expr))(
         equalTo(
-          TQuantification(
-            "A",
-            TQuantification(
-              "B",
-              TFunction(
-                List(TVariable("A"), TVariable("B")),
-                TTuple(List(TVariable("A"), TVariable("B")))
-              )
+          TMulQuantification(
+            Set("A", "B"),
+            TFunction(
+              List(TVariable("A"), TVariable("B")),
+              TTuple(List(TVariable("A"), TVariable("B")))
             )
           )
         )

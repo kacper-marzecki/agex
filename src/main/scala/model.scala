@@ -59,15 +59,25 @@ sealed trait Type {
       case _ => true
     }
 }
+
 object Type {
   case class TLiteral(literalType: LiteralType)         extends Type
   case class TVariable(name: String)                    extends Type
   case class TExistential(name: String)                 extends Type
   case class TQuantification(name: String, _type: Type) extends Type
-  case class TTuple(valueTypes: List[Type])             extends Type
-  case class TTypeRef(targetType: String)               extends Type
-  case class TStruct(fieldTypes: Map[String, Type])     extends Type
-  case class TFunction(args: List[Type], ret: Type)     extends Type
+  case class TMulQuantification(names: Set[String], _type: Type) extends Type {
+    def desugar = names.foldRight(_type) { case (universalName, qt) =>
+      TQuantification(universalName, qt)
+    }
+  }
+  case class TTuple(valueTypes: List[Type])         extends Type
+  case class TTypeRef(targetType: String)           extends Type
+  case class TStruct(fieldTypes: Map[String, Type]) extends Type
+  case class TFunction(args: List[Type], ret: Type) extends Type
+  // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
+  // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
+  // I get a sense that a type lambda and quantifications are not quite the same <duh>
+  // maybe directly a new type : TypeLambda
 }
 
 sealed trait TypedExpression {

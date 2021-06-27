@@ -23,7 +23,7 @@ object StructTest extends DefaultRunnableSpec {
           "id" -> TestCommonExpressions.annotatedId
         )
       )
-      assertM(runSynth(expr))(
+      assertM(runSynth(expr, Context(), true))(
         equalTo(
           TStruct(
             Map[String, Type](
