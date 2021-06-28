@@ -1,3 +1,4 @@
+import cats.conversions.variance
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -49,11 +50,14 @@ object LiteralType {
   *   - update instantiation logic
   *   - update checksAgainst logic
   *   - update subtyping logic
+  *   - update isMonotype logic
   */
 sealed trait Type {
   def isMonotype: Boolean =
     this match {
-      case _: Type.TQuantification => false
+      case _: Type.TQuantification    => false
+      case _: Type.TMulQuantification => false
+      // TODO: is TTypeApp a monotype ?
       case Type.TFunction(args, ret) =>
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
@@ -78,6 +82,41 @@ object Type {
   // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
   // I get a sense that a type lambda and quantifications are not quite the same <duh>
   // maybe directly a new type : TypeLambda
+  case class TTypeApp(_type: Type, args: List[Type]) extends Type {
+    lazy val appliedResult = _type match {
+      case TMulQuantification(names, _type) =>
+        if (names.size != args.size) {
+          Left(AppError.WrongArity(names.size, args.size))
+        } else {
+          Right(
+            names
+              .zip(args)
+              .foldLeft(_type) {
+                case (quantifiedType, (variableName, typeArg)) =>
+                  replaceVariable(variableName, quantifiedType, typeArg)
+              }
+          )
+        }
+      case other => Left(AppError.CannotApplyType(other))
+    }
+    val applyType = zio.ZIO.fromEither(appliedResult)
+  }
+
+  def replaceVariable(
+      variableName: String,
+      in: Type,
+      replacement: Type
+  ): Type = {
+    val repl = replaceVariable(variableName, _, replacement)
+    in match {
+      case TVariable(name) if (name == variableName) => replacement
+      case TTuple(valueTypes)  => TTuple(valueTypes.map(repl))
+      case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
+      case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
+      case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
+      case other                => other
+    }
+  }
 }
 
 sealed trait TypedExpression {

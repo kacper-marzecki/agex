@@ -68,6 +68,9 @@ def checksAgainst(
         // restoring the original TMulQuantification type
         case (typed, delta) => (typed.modify(_._type).setTo(it), delta)
       }
+    case (expression, it @ TTypeApp(tLambda, types)) => {
+      it.applyType.flatMap(checksAgainst(context, expression, _))
+    }
     case (ETuple(values), TTuple(valueTypes))
         if values.length == valueTypes.length => {
       for {
@@ -90,7 +93,6 @@ def checksAgainst(
       context.getTypeDefinition(name).flatMap(checksAgainst(context, expr, _))
     case (EIf(condition, ifTrue, ifFalse), _type) => {
       for {
-        _ <- prettyPrint("EIf", "ChecksAgainst")
         (conditionTyped, gamma) <- checksAgainst(
           context,
           ifTrue,
@@ -141,6 +143,8 @@ def substitution(
         )
       }
     }
+    case it: TTypeApp =>
+      it.applyType.flatMap(substitution(context, _, alpha, b))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
@@ -181,7 +185,8 @@ def occursIn(
       }
     }
     case it: TMulQuantification => occursIn(context, alpha, it.desugar)
-    case TExistential(name)     => succeed(alpha == name)
+    case it: TTypeApp       => it.applyType.flatMap(occursIn(context, alpha, _))
+    case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
     case TTypeRef(name) =>
@@ -265,6 +270,8 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           result <- delta.drop(CMarker(alpha))
         } yield result
       }
+      case (it: TMulQuantification, _) => subtype(context, it.desugar, b)
+      case (_, it: TMulQuantification) => subtype(context, a, it.desugar)
       //<:∀R
       case (_, TQuantification(name, quantType)) =>
         for {
@@ -288,7 +295,9 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateR(context, name, a)
       }
-      case _ => fail(CannotSubtype(context, a, b))
+      case (it: TTypeApp, _) => it.applyType.flatMap(subtype(context, _, b))
+      case (_, it: TTypeApp) => it.applyType.flatMap(subtype(context, a, _))
+      case _                 => fail(CannotSubtype(context, a, b))
     }
   } yield delta
 
@@ -359,6 +368,8 @@ def applicationSynthesizesTo(
         result <- applicationSynthesizesTo(gamma, substitutedType, exprs)
       } yield result
     }
+    case it: TMulQuantification =>
+      applicationSynthesizesTo(context, it.desugar, exprs)
     //→App
     case TFunction(argTypes, ret) =>
       for {
