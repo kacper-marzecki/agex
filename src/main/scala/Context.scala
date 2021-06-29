@@ -26,7 +26,10 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   }.toSet
 
   def add(element: ContextElement): AddResult =
-    validateCanAdd(element)
+    // TODO: ACHTUNG, may break many things
+    // Temporarly turned-off type variable shadowing checks
+    // validateCanAdd(element)
+    ZIO.unit
       .as(Context(elements = elements.appended(element)))
 
   def addAll(newElements: Iterable[ContextElement]): AddResult =
@@ -114,6 +117,8 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     elements.mapFilter {
       case CTypedVariable(name1, _type) if name == name1 =>
         Some(_type)
+      case CTypeDefinition(name1, _type) if name == name1 =>
+        Some(_type)
       case _ => None
     }.headOption
 }
@@ -122,9 +127,13 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
 def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
   _type match {
     case _: TLiteral => ZIO.unit
+    case _: TValue   => ZIO.unit
     case TVariable(name) =>
       if (context.hasVariable(name)) ZIO.unit
-      else fail(TypeNotWellFormed(context, _type))
+      else
+        ZIO.succeed(println(s"KURWA MAĆ $name")) *> fail(
+          TypeNotWellFormed(context, _type)
+        )
     case TFunction(args, ret) =>
       ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
     case TQuantification(alpha, a) =>
@@ -132,7 +141,12 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         .add(CVariable(alpha))
         .flatMap(checkIsWellFormed(_, a))
     case it: TMulQuantification =>
-      checkIsWellFormed(context, it.desugar)
+      context
+        .addAll(it.names.map(CVariable(_)))
+        // .tap(it => ZIO.succeed(pprint.pprintln(it)))
+        .flatMap(checkIsWellFormed(_, it._type))
+
+    // checkIsWellFormed(context, it.desugar)
     case TExistential(name) =>
       if (context.hasExistential(name) || context.getSolved(name).isDefined) {
         ZIO.unit
@@ -147,6 +161,14 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       } else {
         fail(TypeNotKnown(context, targetType))
       }
+    case TSum(types) => ZIO.foreach_(types)(checkIsWellFormed(context, _))
+    case it @ TTypeApp(_type, args) =>
+      ZIO.foreach_(_type :: args)(
+        checkIsWellFormed(context, _)
+      ) *> it
+        .applyT(context)
+        .tap(it => ZIO.succeed(pprint.pprintln(it)))
+        .flatMap(checkIsWellFormed(context, _))
     case TStruct(fieldTypes) =>
       ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
   }
@@ -155,6 +177,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
 // Fig 8
 def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
   _type match {
+    case TValue(_)    => succeed(_type)
     case TLiteral(_)  => succeed(_type)
     case TVariable(_) => succeed(_type)
     case TExistential(name) => {
@@ -171,6 +194,15 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TMulQuantification(names, quantType) =>
       // 1:1 TQuantification port
       applyContext(quantType, context).map(TMulQuantification(names, _))
+    case TSum(types) =>
+      ZIO
+        .foreach(types)(applyContext(_, context))
+        .map(applied => TSum(applied))
+    case TTypeApp(quant, args) =>
+      for {
+        q <- applyContext(quant, context)
+        a <- ZIO.foreach(args)(applyContext(_, context))
+      } yield (TTypeApp(q, a))
     case TTuple(valueTypes) =>
       ZIO.foreach(valueTypes)(applyContext(_, context)).map(TTuple(_))
     case TTypeRef(name) =>

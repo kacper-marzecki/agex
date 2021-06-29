@@ -1,4 +1,3 @@
-import cats.conversions.variance
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -34,6 +33,23 @@ object Expression {
       extends Expression
 }
 
+sealed trait ValueType(val literalType: Type.TLiteral)
+object ValueType {
+  // TODO: do we need a unit and nil value types ?
+  // TODO: tuple, struct value types - do they make sense
+  import Type.*
+  import LiteralType.*
+  case class VTAtom(it: String)   extends ValueType(TLiteral(LTAtom))
+  case class VTChar(it: Char)     extends ValueType(TLiteral(LTChar))
+  case class VTFloat(it: Float)   extends ValueType(TLiteral(LTFloat))
+  case object VTUnit              extends ValueType(TLiteral(LTUnit))
+  case class VTString(it: String) extends ValueType(TLiteral(LTString))
+  case class VTInt(it: Int)       extends ValueType(TLiteral(LTInt))
+  case class VTBool(it: Boolean)  extends ValueType(TLiteral(LTBool))
+
+  case object VTNil extends ValueType(TLiteral(LTNil))
+}
+
 sealed trait LiteralType
 object LiteralType {
   case object LTChar   extends LiteralType
@@ -57,7 +73,8 @@ sealed trait Type {
     this match {
       case _: Type.TQuantification    => false
       case _: Type.TMulQuantification => false
-      // TODO: is TTypeApp a monotype ?
+      case Type.TSum(types)           => types.forall(_.isMonotype)
+      // TODO: is TTypeApp a monotype ? i dont think so, eg the arg can be quantified
       case Type.TFunction(args, ret) =>
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
@@ -65,6 +82,7 @@ sealed trait Type {
 }
 
 object Type {
+  case class TValue(valueType: ValueType)               extends Type
   case class TLiteral(literalType: LiteralType)         extends Type
   case class TVariable(name: String)                    extends Type
   case class TExistential(name: String)                 extends Type
@@ -77,6 +95,7 @@ object Type {
   case class TTuple(valueTypes: List[Type])         extends Type
   case class TTypeRef(targetType: String)           extends Type
   case class TStruct(fieldTypes: Map[String, Type]) extends Type
+  case class TSum(types: Set[Type])                 extends Type
   case class TFunction(args: List[Type], ret: Type) extends Type
   // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
   // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
@@ -100,6 +119,22 @@ object Type {
       case other => Left(AppError.CannotApplyType(other))
     }
     val applyType = zio.ZIO.fromEither(appliedResult)
+    def applyT(context: Context) = applyContext(_type, context).flatMap {
+      case TMulQuantification(names, _type) =>
+        if (names.size != args.size) {
+          zio.ZIO.fail(AppError.WrongArity(names.size, args.size))
+        } else {
+          zio.ZIO.succeed(
+            names
+              .zip(args)
+              .foldLeft(_type) {
+                case (quantifiedType, (variableName, typeArg)) =>
+                  replaceVariable(variableName, quantifiedType, typeArg)
+              }
+          )
+        }
+      case other => zio.ZIO.fail(AppError.CannotApplyType(other))
+    }
   }
 
   def replaceVariable(
@@ -114,7 +149,12 @@ object Type {
       case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
-      case other                => other
+      case TSum(types)          => TSum(types.map(repl))
+      case other => {
+        println("other")
+        println(other)
+        other
+      }
     }
   }
 }

@@ -21,6 +21,11 @@ object TestCommonExpressions {
 }
 
 object CommonTestFunctions {
+  def runSynthDebug(
+      expr: Expression,
+      context: Context = Context()
+  ) = runSynth(expr, context, true)
+
   def runSynth(
       expr: Expression,
       context: Context = Context(),

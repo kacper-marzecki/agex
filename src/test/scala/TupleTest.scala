@@ -6,6 +6,7 @@ import zio.test.environment.*
 import Expression.*
 import Type.*
 import LiteralType.*
+import ValueType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
@@ -40,7 +41,11 @@ object TupleTest extends DefaultRunnableSpec {
         equalTo(
           TTuple(
             repeat(
-              List(TLiteral(LTInt), TLiteral(LTBool), TLiteral(LTString)),
+              List(
+                TValue(VTInt(1)),
+                TValue(VTBool(false)),
+                TValue(VTString("string"))
+              ),
               100
             )
           )
@@ -69,10 +74,14 @@ object TupleTest extends DefaultRunnableSpec {
           TTuple(
             List(
               TTuple(
-                List(TLiteral(LTInt), TLiteral(LTInt), TLiteral(LTBool))
+                List(TValue(VTInt(1)), TValue(VTInt(1)), TLiteral(LTBool))
               ),
               TTuple(
-                List(TLiteral(LTString), TLiteral(LTString), TLiteral(LTBool))
+                List(
+                  TValue(VTString("1")),
+                  TValue(VTString("1")),
+                  TLiteral(LTBool)
+                )
               )
             )
           )
@@ -93,7 +102,7 @@ object TupleTest extends DefaultRunnableSpec {
       assertM(runSynth(exp).flip)(
         equalTo(
           AppError.TupleSizesDontMatch(
-            TTuple(List(TLiteral(LTInt), TLiteral(LTInt))),
+            TTuple(List(TValue(VTInt(1)), TValue(VTInt(1)))),
             TTuple(List(TLiteral(LTInt)))
           )
         )
