@@ -44,7 +44,7 @@ object FunctionTest extends DefaultRunnableSpec {
       ETuple(List(EVariable("a"), EVariable("b")))
     ),
     TMulQuantification(
-      Set("A", "B"),
+      List("A", "B"),
       TFunction(
         List(TVariable("A"), TVariable("B")),
         TTuple(List(TVariable("A"), TVariable("B")))
@@ -89,7 +89,7 @@ object FunctionTest extends DefaultRunnableSpec {
       assertM(runSynth(expr))(
         equalTo(
           TMulQuantification(
-            Set("A", "B"),
+            List("A", "B"),
             TFunction(
               List(TVariable("A"), TVariable("B")),
               TTuple(List(TVariable("A"), TVariable("B")))

@@ -108,13 +108,6 @@ def checksAgainst(
       it.applyT(context).flatMap(checksAgainst(context, expression, _))
       // it.applyType.flatMap(checksAgainst(context, expression, _))
     }
-    case (expression, TSum(types)) => {
-      // TODO: remove unsafe head call
-      ZIO.firstSuccessOf(
-        checksAgainst(context, expression, types.head),
-        types.tail.map(checksAgainst(context, expression, _))
-      )
-    }
     case (ETuple(values), TTuple(valueTypes))
         if values.length == valueTypes.length => {
       for {
@@ -269,10 +262,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //<:Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
-        checkIsWellFormed(context, a).as(context)
+        checkIsWellFormed(context, a)
+          .as(context)
       }
       //<:->
-      case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) => {
         for {
           _ <- assertTrue(
             args1.size == args2.size,
@@ -286,6 +280,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
+      }
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -324,15 +319,18 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           result <- delta.drop(CMarker(alpha))
         } yield result
       }
-      case (it: TMulQuantification, _) => subtype(context, it.desugar, b)
-      case (_, it: TMulQuantification) => subtype(context, a, it.desugar)
+      case (it: TMulQuantification, _) =>
+        subtype(context, it.desugar, b)
+      case (_, it: TMulQuantification) =>
+        subtype(context, a, it.desugar)
       //<:∀R
-      case (_, TQuantification(name, quantType)) =>
+      case (_, TQuantification(name, quantType)) => {
         for {
           theta <- context.add(CVariable(name))
           gamma <- subtype(theta, a, quantType)
           delta <- gamma.drop(CVariable(name))
         } yield delta
+      }
       //<:InstantiateL
       case (TExistential(name), _) => {
         assertNotM(
@@ -349,22 +347,30 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateR(context, name, a)
       }
-      case (it: TTypeApp, _) => it.applyType.flatMap(subtype(context, _, b))
-      case (_, it: TTypeApp) => it.applyType.flatMap(subtype(context, a, _))
+      case (it: TTypeApp, _) =>
+        it.applyType
+          .flatMap(subtype(context, _, b))
+      case (_, it: TTypeApp) =>
+        it.applyType
+          .flatMap(subtype(context, a, _))
       case (TSum(subTypes), TSum(types)) =>
-        ZIO.foldLeft(subTypes)(context) { case (delta, subType) =>
-          // TODO remove unsafe head
-          ZIO.firstSuccessOf(
-            subtype(context, subType, types.head),
-            types.tail.map(subtype(context, subType, _))
-          )
-        }
+        ZIO
+          .foldLeft(subTypes)(context) { case (delta, subType) =>
+            // TODO remove unsafe head
+            ZIO.firstSuccessOf(
+              subtype(context, subType, types.head),
+              types.tail.map(subtype(context, subType, _))
+            )
+          }
       case (it, TSum(types)) =>
-        ZIO.firstSuccessOf(
-          subtype(context, it, types.head),
-          types.tail.map(subtype(context, it, _))
-        )
-      case _ => fail(CannotSubtype(context, a, b))
+        ZIO
+          .firstSuccessOf(
+            subtype(context, it, types.head),
+            types.tail.map(subtype(context, it, _))
+          )
+      case _ => {
+        fail(CannotSubtype(context, a, b))
+      }
     }
   } yield delta
 
@@ -581,15 +587,19 @@ def synthesizesTo(
           condition,
           TLiteral(LTBool)
         )
-        // TODO: find a common supertype ?
         (ifTrueTyped, theta) <- synthesizesTo(delta, ifTrue)
-        (ifFalseTyped, delta) <- checksAgainst(
+        (ifFalseTyped, psi)  <- synthesizesTo(delta, ifFalse)
+        // TODO think out: maybe this could be avoided by simplifying Sum(A, A) ==> A
+        expressionType <- checksAgainst(
           theta,
           ifFalse,
           ifTrueTyped._type
+        ).fold(
+          _ => TSum(Set(ifTrueTyped._type, ifFalseTyped._type)),
+          _ => ifTrueTyped._type
         )
       } yield (
-        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, ifTrueTyped._type),
+        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, expressionType),
         delta
       )
     }

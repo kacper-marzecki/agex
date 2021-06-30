@@ -13,7 +13,7 @@ object TestCommonExpressions {
   val annotatedId = EAnnotation(
     idFunction,
     TMulQuantification(
-      Set("a"),
+      List("a"),
       TFunction(List(TVariable("a")), TVariable("a"))
     )
   )

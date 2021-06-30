@@ -131,9 +131,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
     case TVariable(name) =>
       if (context.hasVariable(name)) ZIO.unit
       else
-        ZIO.succeed(println(s"KURWA MAĆ $name")) *> fail(
-          TypeNotWellFormed(context, _type)
-        )
+        fail(TypeNotWellFormed(context, _type))
     case TFunction(args, ret) =>
       ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
     case TQuantification(alpha, a) =>
@@ -143,7 +141,6 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
     case it: TMulQuantification =>
       context
         .addAll(it.names.map(CVariable(_)))
-        // .tap(it => ZIO.succeed(pprint.pprintln(it)))
         .flatMap(checkIsWellFormed(_, it._type))
 
     // checkIsWellFormed(context, it.desugar)
@@ -167,7 +164,6 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         checkIsWellFormed(context, _)
       ) *> it
         .applyT(context)
-        .tap(it => ZIO.succeed(pprint.pprintln(it)))
         .flatMap(checkIsWellFormed(context, _))
     case TStruct(fieldTypes) =>
       ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))

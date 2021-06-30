@@ -87,7 +87,7 @@ object Type {
   case class TVariable(name: String)                    extends Type
   case class TExistential(name: String)                 extends Type
   case class TQuantification(name: String, _type: Type) extends Type
-  case class TMulQuantification(names: Set[String], _type: Type) extends Type {
+  case class TMulQuantification(names: List[String], _type: Type) extends Type {
     def desugar = names.foldRight(_type) { case (universalName, qt) =>
       TQuantification(universalName, qt)
     }
@@ -116,7 +116,8 @@ object Type {
               }
           )
         }
-      case other => Left(AppError.CannotApplyType(other))
+      case other =>
+        Left(AppError.CannotApplyType(other))
     }
     val applyType = zio.ZIO.fromEither(appliedResult)
     def applyT(context: Context) = applyContext(_type, context).flatMap {
@@ -150,11 +151,7 @@ object Type {
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
       case TSum(types)          => TSum(types.map(repl))
-      case other => {
-        println("other")
-        println(other)
-        other
-      }
+      case other                => other
     }
   }
 }

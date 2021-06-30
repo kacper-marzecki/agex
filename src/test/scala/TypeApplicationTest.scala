@@ -11,13 +11,12 @@ import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
 import CommonTestFunctions.*
-import javax.lang.model.`type`.TypeMirror
-import cats.data.EitherT
+import java.util.function.ToIntFunction
 
 object TypeApplicationTest extends DefaultRunnableSpec {
 
   val EitherType = TMulQuantification(
-    Set("A", "B"),
+    List("A", "B"),
     TSum(
       Set(
         TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
@@ -26,10 +25,10 @@ object TypeApplicationTest extends DefaultRunnableSpec {
     )
   )
   val LeftConstructorType = TMulQuantification(
-    Set("X"),
+    List("A"),
     TFunction(
-      List(TVariable("X")),
-      TTuple(List(TValue(VTAtom("left")), TVariable("X")))
+      List(TVariable("A")),
+      TTuple(List(TValue(VTAtom("left")), TVariable("A")))
     )
   )
   val LeftConstructor =
@@ -48,10 +47,10 @@ object TypeApplicationTest extends DefaultRunnableSpec {
       ETuple(List(ELiteral(LAtom("right")), EVariable("a")))
     ),
     TMulQuantification(
-      Set("B"),
+      List("A"),
       TFunction(
-        List(TVariable("B")),
-        TTuple(List(TValue(VTAtom("right")), TVariable("B")))
+        List(TVariable("A")),
+        TTuple(List(TValue(VTAtom("right")), TVariable("A")))
       )
     )
   )
@@ -70,11 +69,11 @@ object TypeApplicationTest extends DefaultRunnableSpec {
         EFunctionApplication(LeftConstructor, List(ELiteral(LInt(2)))),
         TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
       )
-      assertM(runSynthDebug(expr))(
+      assertM(runSynth(expr))(
         equalTo(
           TTypeApp(
             TMulQuantification(
-              Set("A", "B"),
+              List("A", "B"),
               TSum(
                 Set(
                   TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
@@ -94,38 +93,46 @@ object TypeApplicationTest extends DefaultRunnableSpec {
           ContextElement.CTypeDefinition("Left", LeftConstructorType)
         )
       )
+      // a : [B, A](A) => Either[A, B] = something => Left(something)
+      // a(2) : Either[Int, String]
       val expr = EAnnotation(
-        EFunction(
-          List("something"),
-          EFunctionApplication(EVariable("Left"), List(EVariable("something")))
-        ),
-        TMulQuantification(
-          Set("A", "B"),
-          TFunction(
-            List(TVariable("A")),
-            TTypeApp(TTypeRef("Either"), List(TVariable("A"), TVariable("B")))
-          )
-        )
-      )
-      assertM(runSynth(expr, ctx))(
-        equalTo(
-          TMulQuantification(
-            Set("A", "B"),
-            TFunction(
-              List(TVariable("A")),
-              TTypeApp(
-                TMulQuantification(
-                  Set("A", "B"),
-                  TSum(
-                    Set(
-                      TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
-                      TTuple(List(TValue(VTAtom("right")), TVariable("B")))
-                    )
-                  )
-                ),
-                List(TVariable("A"), TVariable("B"))
+        EFunctionApplication(
+          EAnnotation(
+            EFunction(
+              List("something"),
+              EFunctionApplication(
+                EVariable("Left"),
+                List(EVariable("something"))
+              )
+            ),
+            TMulQuantification(
+              List("B", "A"),
+              TFunction(
+                List(TVariable("A")),
+                TTypeApp(
+                  TTypeRef("Either"),
+                  List(TVariable("A"), TVariable("B"))
+                )
               )
             )
+          ),
+          List(ELiteral(LInt(2)))
+        ),
+        TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
+      )
+      assertM(runSynthDebug(expr, ctx))(
+        equalTo(
+          TTypeApp(
+            TMulQuantification(
+              List("A", "B"),
+              TSum(
+                Set(
+                  TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
+                  TTuple(List(TValue(VTAtom("right")), TVariable("B")))
+                )
+              )
+            ),
+            List(TLiteral(LTInt), TLiteral(LTString))
           )
         )
       )

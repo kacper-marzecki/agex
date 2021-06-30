@@ -3,7 +3,7 @@ import zio.console.{putStrLn, Console, putStr}
 
 extension [A](it: Vector[A]) {
   def findIndexOf(elem: A) =
-    it.indexWhere(_ == elem) match {
+    it.lastIndexWhere(_ == elem) match {
       case -1    => None
       case index => Some(index)
     }
