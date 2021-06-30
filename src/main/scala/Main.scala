@@ -105,7 +105,21 @@ def checksAgainst(
         case (typed, delta) => (typed.modify(_._type).setTo(it), delta)
       }
     case (expression, it @ TTypeApp(tLambda, types)) => {
-      it.applyT(context).flatMap(checksAgainst(context, expression, _))
+      it
+        .applyT(context)
+        .flatMap {
+          case it @ TTypeApp(TVariable(_), _) =>
+            // rzut na taśmę, przekopiowane z case _ =>
+            for {
+              (typed, theta) <- synthesizesTo(context, expr)
+              (a, b) <- ZIO.tupled(
+                applyContext(typed._type, theta),
+                applyContext(_type, theta)
+              )
+              result <- subtype(theta, a, b)
+            } yield (typed, result)
+          case other => checksAgainst(context, expression, other)
+        }
       // it.applyType.flatMap(checksAgainst(context, expression, _))
     }
     case (ETuple(values), TTuple(valueTypes))
@@ -181,13 +195,21 @@ def substitution(
         )
       }
     }
+    case it @ TTypeApp(TVariable(name), args) =>
+      for {
+        quant <- substitution(context, TVariable(name), alpha, b)
+        args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        _     <- pPrint("KURWA", "KEK")
+      } yield TTypeApp(quant, args)
     case it: TTypeApp =>
       it.applyType.flatMap(substitution(context, _, alpha, b))
     case TSum(types) =>
       ZIO.foreach(types)(substitution(context, _, alpha, b)).map(TSum(_))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
-      ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
+      ZIO
+        .foreach(valueTypes)(substitution(context, _, alpha, b))
+        .map(TTuple(_))
     case TFunction(args, ret) =>
       for {
         argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
@@ -226,8 +248,9 @@ def occursIn(
       }
     }
     case it: TMulQuantification => occursIn(context, alpha, it.desugar)
-    case it: TTypeApp       => it.applyType.flatMap(occursIn(context, alpha, _))
-    case TSum(types)        => anyM(types, occursIn(context, alpha, _))
+    // case it: TTypeApp       => it.applyType.flatMap(occursIn(context, alpha, _))
+    case it: TTypeApp => anyM(it._type :: it.args, occursIn(context, alpha, _))
+    case TSum(types)  => anyM(types, occursIn(context, alpha, _))
     case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
@@ -348,6 +371,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           instantiateR(context, name, a)
       }
       case (it: TTypeApp, _) =>
+        // TU LEŻY PROBLEM POGRZEBANY
         it.applyType
           .flatMap(subtype(context, _, b))
       case (_, it: TTypeApp) =>
@@ -589,7 +613,7 @@ def synthesizesTo(
         )
         (ifTrueTyped, theta) <- synthesizesTo(delta, ifTrue)
         (ifFalseTyped, psi)  <- synthesizesTo(delta, ifFalse)
-        // TODO think out: maybe this could be avoided by simplifying Sum(A, A) ==> A
+        // TODO: think out: maybe this could be avoided by simplifying Sum(A, A) ==> A
         expressionType <- checksAgainst(
           theta,
           ifFalse,

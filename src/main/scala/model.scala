@@ -116,6 +116,7 @@ object Type {
               }
           )
         }
+      case it: TVariable => Right(this)
       case other =>
         Left(AppError.CannotApplyType(other))
     }
@@ -134,7 +135,8 @@ object Type {
               }
           )
         }
-      case other => zio.ZIO.fail(AppError.CannotApplyType(other))
+      case it: TVariable => zio.ZIO.succeed(this)
+      case other         => zio.ZIO.fail(AppError.CannotApplyType(other))
     }
   }
 

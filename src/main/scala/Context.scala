@@ -164,7 +164,9 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         checkIsWellFormed(context, _)
       ) *> it
         .applyT(context)
-        .flatMap(checkIsWellFormed(context, _))
+        .unit
+    // is this check needed ?
+    // .flatMap(checkIsWellFormed(context, _))
     case TStruct(fieldTypes) =>
       ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
   }
