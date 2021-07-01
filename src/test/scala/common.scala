@@ -12,12 +12,20 @@ object TestCommonExpressions {
   val idFunction = EFunction(List("x"), EVariable("x"))
   val annotatedId = EAnnotation(
     idFunction,
-    TQuantification("a", TFunction(List(TVariable("a")), TVariable("a")))
+    TMulQuantification(
+      List("a"),
+      TFunction(List(TVariable("a")), TVariable("a"))
+    )
   )
   val strBoolTuple = ETuple(List(litString, litBool))
 }
 
 object CommonTestFunctions {
+  def runSynthDebug(
+      expr: Expression,
+      context: Context = Context()
+  ) = runSynth(expr, context, true)
+
   def runSynth(
       expr: Expression,
       context: Context = Context(),

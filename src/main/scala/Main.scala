@@ -6,12 +6,12 @@ import AppError.*
 import Type.*
 import Literal.*
 import LiteralType.*
+import ValueType.*
 import Expression.*
 import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
-import javax.imageio.plugins.tiff.TIFFField
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -23,8 +23,40 @@ def assertLiteralChecksAgainst(
     case (LInt(_), LTInt)       => ZIO.unit
     case (LFloat(_), LTFloat)   => ZIO.unit
     case (LBool(_), LTBool)     => ZIO.unit
+    case (LAtom(_), LTAtom)     => ZIO.unit
     case (LUnit, LTUnit)        => ZIO.unit
-    case _ => ZIO.fail(AppError.TypeNotApplicableToLiteral(_type, literal))
+    case _ =>
+      ZIO.fail(AppError.TypeNotApplicableToLiteral(TLiteral(_type), literal))
+  }
+}
+
+def assertLiteralChecksAgainst(
+    literal: Literal,
+    _type: ValueType
+): Eff[Unit] = {
+  val failure: IO[AppError.TypeNotApplicableToLiteral, Nothing] =
+    ZIO.fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
+  (literal, _type) match {
+    case (LAtom(value), VTAtom(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+    case (LChar(value), VTChar(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+
+    case (LString(value), VTString(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+
+    case (LInt(value), VTInt(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+
+    case (LFloat(value), VTFloat(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+
+    case (LBool(value), VTBool(valueType)) =>
+      if (valueType == value) ZIO.unit else failure
+    case (LUnit, VTUnit) =>
+      ZIO.unit
+    case _ =>
+      ZIO.fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
   }
 }
 
@@ -35,6 +67,10 @@ def checksAgainst(
     _type: Type
 ): Eff[(TypedExpression, Context)] = {
   (expr, _type) match {
+    case (ELiteral(literal), TValue(valueType)) =>
+      assertLiteralChecksAgainst(literal, valueType).as(
+        (TELiteral(literal, _type), context)
+      )
     //Decl1I
     case (ELiteral(literal), TLiteral(_type)) => {
       assertLiteralChecksAgainst(literal, _type).as(
@@ -63,6 +99,38 @@ def checksAgainst(
         delta          <- theta.drop(variable)
       } yield (typed, delta)
     }
+    case (expression, it: TMulQuantification) =>
+      checksAgainst(context, expression, it.desugar).map {
+        // restoring the original TMulQuantification type
+        case (typed, delta) => (typed.modify(_._type).setTo(it), delta)
+      }
+    case (expression, it @ TTypeApp(tLambda, types)) => {
+      it
+        .applyType(context)
+        .flatMap {
+          case TTypeApp(TExistential(_), _) =>
+            for {
+              (typed, theta) <- synthesizesTo(context, expr)
+              (a, b) <- ZIO.tupled(
+                applyContext(typed._type, theta),
+                applyContext(_type, theta)
+              )
+              result <- subtype(theta, a, b)
+            } yield (typed, result)
+          case it @ TTypeApp(TVariable(_), _) =>
+            // rzut na taśmę, przekopiowane z case _ =>
+            for {
+              (typed, theta) <- synthesizesTo(context, expr)
+              (a, b) <- ZIO.tupled(
+                applyContext(typed._type, theta),
+                applyContext(_type, theta)
+              )
+              result <- subtype(theta, a, b)
+            } yield (typed, result)
+          case other => checksAgainst(context, expression, other)
+        }
+      // it.applyType.flatMap(checksAgainst(context, expression, _))
+    }
     case (ETuple(values), TTuple(valueTypes))
         if values.length == valueTypes.length => {
       for {
@@ -85,7 +153,6 @@ def checksAgainst(
       context.getTypeDefinition(name).flatMap(checksAgainst(context, expr, _))
     case (EIf(condition, ifTrue, ifFalse), _type) => {
       for {
-        _ <- prettyPrint("EIf", "ChecksAgainst")
         (conditionTyped, gamma) <- checksAgainst(
           context,
           ifTrue,
@@ -118,6 +185,7 @@ def substitution(
 ): IO[AppError, Type] = {
   a match {
     case _: TLiteral     => succeed(a)
+    case _: TValue       => succeed(a)
     case TVariable(name) => if (name == alpha) succeed(b) else succeed(a)
     case TQuantification(name, quantType) => {
       if (name == alpha) {
@@ -126,9 +194,28 @@ def substitution(
         substitution(context, quantType, alpha, b).map(TQuantification(name, _))
       }
     }
+    // 1:1 port of TQuantification
+    case TMulQuantification(names, quantType) => {
+      if (names.contains(alpha)) {
+        succeed(TMulQuantification(names, b))
+      } else {
+        substitution(context, quantType, alpha, b).map(
+          TMulQuantification(names, _)
+        )
+      }
+    }
+    case it @ TTypeApp(q, args) =>
+      for {
+        quant <- substitution(context, q, alpha, b)
+        args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+      } yield TTypeApp(quant, args)
+    case TSum(types) =>
+      ZIO.foreach(types)(substitution(context, _, alpha, b)).map(TSum(_))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
-      ZIO.foreach(valueTypes)(substitution(context, _, alpha, b)).map(TTuple(_))
+      ZIO
+        .foreach(valueTypes)(substitution(context, _, alpha, b))
+        .map(TTuple(_))
     case TFunction(args, ret) =>
       for {
         argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
@@ -155,6 +242,7 @@ def occursIn(
 ): IO[AppError, Boolean] = {
   a match {
     case TLiteral(_)     => succeed(false)
+    case TValue(_)       => succeed(false)
     case TVariable(name) => succeed(alpha == name)
     case TFunction(args, ret) =>
       anyM(ret :: args, occursIn(context, alpha, _))
@@ -165,6 +253,16 @@ def occursIn(
         return occursIn(context, alpha, t);
       }
     }
+    case it: TMulQuantification => occursIn(context, alpha, it.desugar)
+    // case it: TTypeApp       => it.applyType.flatMap(occursIn(context, alpha, _))
+    case it: TTypeApp =>
+      it.applyType(context)
+        .flatMap {
+          case it: TTypeApp =>
+            anyM(it._type :: it.args, occursIn(context, alpha, _))
+          case _ => ???
+        }
+    case TSum(types)        => anyM(types, occursIn(context, alpha, _))
     case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
@@ -186,6 +284,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         assertTrue(literalA == literalB, TypesNotEqual(a, b))
           .as(context)
       }
+      case (TValue(value), TValue(other)) =>
+        assertTrue(value == other, TypesNotEqual(a, b))
+          .as(context)
+      case (TValue(value), TLiteral(literalType)) =>
+        subtype(context, value.literalType, b)
       //<:Var
       case (TVariable(nameA), TVariable(nameB)) => {
         checkIsWellFormed(context, a) *>
@@ -194,10 +297,12 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //<:Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
-        checkIsWellFormed(context, a).as(context)
+        checkIsWellFormed(context, a)
+          .as(context)
       }
+
       //<:->
-      case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) => {
         for {
           _ <- assertTrue(
             args1.size == args2.size,
@@ -211,6 +316,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
+      }
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -234,6 +340,10 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         }
       }
       //<:∀L
+      case (it: TMulQuantification, _) =>
+        subtype(context, it.desugar, b)
+      case (_, it: TMulQuantification) =>
+        subtype(context, a, it.desugar)
       case (TQuantification(name, quantType), _) => {
         for {
           alpha <- CompilerState.makeExistential
@@ -250,12 +360,13 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         } yield result
       }
       //<:∀R
-      case (_, TQuantification(name, quantType)) =>
+      case (_, TQuantification(name, quantType)) => {
         for {
           theta <- context.add(CVariable(name))
           gamma <- subtype(theta, a, quantType)
           delta <- gamma.drop(CVariable(name))
         } yield delta
+      }
       //<:InstantiateL
       case (TExistential(name), _) => {
         assertNotM(
@@ -272,20 +383,59 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateR(context, name, a)
       }
-      case _ => fail(CannotSubtype(context, a, b))
+      // TODO: will need a rework to get HKT to work
+      case (TTypeApp(q1, args1), TTypeApp(q2, args2)) => {
+        for {
+          _ <- assertTrue(
+            args1.size == args2.size,
+            WrongArity(args2.size, args1.size)
+          )
+          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+            case (delta, (arg1, arg2)) =>
+              subtype(delta, arg1, arg2)
+          }
+          q1    <- applyContext(q1, theta)
+          q2    <- applyContext(q2, theta)
+          delta <- subtype(theta, q1, q2)
+        } yield delta
+      }
+      case (it @ TTypeApp(q, args), _) =>
+        it.applyType(context)
+          .flatMap(subtype(context, _, b))
+      case (_, it: TTypeApp) =>
+        it.applyType(context)
+          .flatMap(subtype(context, a, _))
+      case (TSum(subTypes), TSum(types)) =>
+        ZIO
+          .foldLeft(subTypes)(context) { case (delta, subType) =>
+            // TODO remove unsafe head
+            ZIO.firstSuccessOf(
+              subtype(context, subType, types.head),
+              types.tail.map(subtype(context, subType, _))
+            )
+          }
+      case (it, TSum(types)) =>
+        ZIO
+          .firstSuccessOf(
+            subtype(context, it, types.head),
+            types.tail.map(subtype(context, it, _))
+          )
+      case _ => {
+        fail(CannotSubtype(context, a, b))
+      }
     }
   } yield delta
 
-def literalSynthesizesTo(literal: Literal): LiteralType = {
+def literalSynthesizesTo(literal: Literal): Type = {
   literal match {
-    case LChar(_)   => LTChar
-    case LString(_) => LTString
-    case LInt(_)    => LTInt
-    case LFloat(_)  => LTFloat
-    case LBool(_)   => LTBool
-    case LAtom(_)   => LTAtom
-    case LNil       => LTNil
-    case LUnit      => LTUnit
+    case LChar(value)   => TValue(VTChar(value))
+    case LString(value) => TValue(VTString(value))
+    case LInt(value)    => TValue(VTInt(value))
+    case LFloat(value)  => TValue(VTFloat(value))
+    case LBool(value)   => TValue(VTBool(value))
+    case LAtom(value)   => TValue(VTAtom(value))
+    case LNil           => TValue(VTNil)
+    case LUnit          => TValue(VTUnit)
   }
 }
 
@@ -343,6 +493,8 @@ def applicationSynthesizesTo(
         result <- applicationSynthesizesTo(gamma, substitutedType, exprs)
       } yield result
     }
+    case it: TMulQuantification =>
+      applicationSynthesizesTo(context, it.desugar, exprs)
     //→App
     case TFunction(argTypes, ret) =>
       for {
@@ -384,7 +536,7 @@ def synthesizesTo(
     //1I=>
     case ELiteral(literal) =>
       succeed(
-        (TELiteral(literal, TLiteral(literalSynthesizesTo(literal))), context)
+        (TELiteral(literal, literalSynthesizesTo(literal)), context)
       )
     //Var
     case EVariable(name) => {
@@ -397,13 +549,14 @@ def synthesizesTo(
     //Anno
     case EAnnotation(expression, annType) => {
       for {
-        _ <- checkIsWellFormed(context, annType)
+        _           <- checkIsWellFormed(context, annType)
+        appliedType <- applyContext(annType, context)
         (typedExpression, delta) <- checksAgainst(
           context,
           expression,
-          annType
+          appliedType
         )
-      } yield (TEAnnotation(typedExpression, annType, annType), delta)
+      } yield (TEAnnotation(typedExpression, appliedType, appliedType), delta)
     }
     case ETypeAlias(newName, targetType, expr) => {
       for {
@@ -486,15 +639,19 @@ def synthesizesTo(
           condition,
           TLiteral(LTBool)
         )
-        // TODO: find a common supertype ?
         (ifTrueTyped, theta) <- synthesizesTo(delta, ifTrue)
-        (ifFalseTyped, delta) <- checksAgainst(
+        (ifFalseTyped, psi)  <- synthesizesTo(delta, ifFalse)
+        // TODO: think out: maybe this could be avoided by simplifying Sum(A, A) ==> A
+        expressionType <- checksAgainst(
           theta,
           ifFalse,
           ifTrueTyped._type
+        ).fold(
+          _ => TSum(Set(ifTrueTyped._type, ifFalseTyped._type)),
+          _ => ifTrueTyped._type
         )
       } yield (
-        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, ifTrueTyped._type),
+        TEIf(typedCondition, ifTrueTyped, ifFalseTyped, expressionType),
         delta
       )
     }

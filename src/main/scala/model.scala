@@ -33,6 +33,23 @@ object Expression {
       extends Expression
 }
 
+sealed trait ValueType(val literalType: Type.TLiteral)
+object ValueType {
+  // TODO: do we need a unit and nil value types ?
+  // TODO: tuple, struct value types - do they make sense
+  import Type.*
+  import LiteralType.*
+  case class VTAtom(it: String)   extends ValueType(TLiteral(LTAtom))
+  case class VTChar(it: Char)     extends ValueType(TLiteral(LTChar))
+  case class VTFloat(it: Float)   extends ValueType(TLiteral(LTFloat))
+  case object VTUnit              extends ValueType(TLiteral(LTUnit))
+  case class VTString(it: String) extends ValueType(TLiteral(LTString))
+  case class VTInt(it: Int)       extends ValueType(TLiteral(LTInt))
+  case class VTBool(it: Boolean)  extends ValueType(TLiteral(LTBool))
+
+  case object VTNil extends ValueType(TLiteral(LTNil))
+}
+
 sealed trait LiteralType
 object LiteralType {
   case object LTChar   extends LiteralType
@@ -49,25 +66,80 @@ object LiteralType {
   *   - update instantiation logic
   *   - update checksAgainst logic
   *   - update subtyping logic
+  *   - update isMonotype logic
   */
 sealed trait Type {
   def isMonotype: Boolean =
     this match {
-      case _: Type.TQuantification => false
+      case _: Type.TQuantification    => false
+      case _: Type.TMulQuantification => false
+      case Type.TSum(types)           => types.forall(_.isMonotype)
+      // TODO: is TTypeApp a monotype ? i dont think so, eg the arg can be quantified
+      case Type.TTypeApp(q, args) =>
+        false // args.forall(_.isMonotype) && q.isMonotype
       case Type.TFunction(args, ret) =>
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
     }
 }
+
 object Type {
+  case class TValue(valueType: ValueType)               extends Type
   case class TLiteral(literalType: LiteralType)         extends Type
   case class TVariable(name: String)                    extends Type
   case class TExistential(name: String)                 extends Type
   case class TQuantification(name: String, _type: Type) extends Type
-  case class TTuple(valueTypes: List[Type])             extends Type
-  case class TTypeRef(targetType: String)               extends Type
-  case class TStruct(fieldTypes: Map[String, Type])     extends Type
-  case class TFunction(args: List[Type], ret: Type)     extends Type
+  case class TMulQuantification(names: List[String], _type: Type) extends Type {
+    def desugar = names.foldRight(_type) { case (universalName, qt) =>
+      TQuantification(universalName, qt)
+    }
+  }
+  case class TTuple(valueTypes: List[Type])         extends Type
+  case class TTypeRef(targetType: String)           extends Type
+  case class TStruct(fieldTypes: Map[String, Type]) extends Type
+  case class TSum(types: Set[Type])                 extends Type
+  case class TFunction(args: List[Type], ret: Type) extends Type
+  // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
+  // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
+  // I get a sense that a type lambda and quantifications are not quite the same <duh>
+  // maybe directly a new type : TypeLambda
+  case class TTypeApp(_type: Type, args: List[Type]) extends Type {
+    def applyType(context: Context) = applyContext(_type, context).flatMap {
+      case TMulQuantification(names, _type) =>
+        if (names.size != args.size) {
+          zio.ZIO.fail(AppError.WrongArity(names.size, args.size))
+        } else {
+          zio.ZIO.succeed(
+            names
+              .zip(args)
+              .foldLeft(_type) {
+                case (quantifiedType, (variableName, typeArg)) =>
+                  replaceVariable(variableName, quantifiedType, typeArg)
+              }
+          )
+        }
+      // case it: TVariable    => zio.ZIO.succeed(this)
+      // case it: TExistential => zio.ZIO.succeed(this)
+      case other => zio.ZIO.fail(AppError.CannotApplyType(other))
+    }
+  }
+
+  def replaceVariable(
+      variableName: String,
+      in: Type,
+      replacement: Type
+  ): Type = {
+    val repl = replaceVariable(variableName, _, replacement)
+    in match {
+      case TVariable(name) if (name == variableName) => replacement
+      case TTuple(valueTypes)  => TTuple(valueTypes.map(repl))
+      case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
+      case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
+      case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
+      case TSum(types)          => TSum(types.map(repl))
+      case other                => other
+    }
+  }
 }
 
 sealed trait TypedExpression {

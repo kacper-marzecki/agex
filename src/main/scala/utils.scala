@@ -3,7 +3,7 @@ import zio.console.{putStrLn, Console, putStr}
 
 extension [A](it: Vector[A]) {
   def findIndexOf(elem: A) =
-    it.indexWhere(_ == elem) match {
+    it.lastIndexWhere(_ == elem) match {
       case -1    => None
       case index => Some(index)
     }
@@ -11,6 +11,9 @@ extension [A](it: Vector[A]) {
 
 def prettyShow(it: Any): String =
   pprint.tokenize(it).mkString("") + "\n"
+
+def pPrint(it: Any, tag: String) =
+  ZIO(pprint.pprintln(tag)).orDie *> ZIO(pprint.pprintln(it)).orDie
 
 def prettyPrint(it: Any, tag: String): URIO[Console, Unit] =
   putStrLn(s"$tag: ${prettyShow(it)}").orDie

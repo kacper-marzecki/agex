@@ -7,6 +7,7 @@ import zio.test.environment.*
 import Expression.*
 import Type.*
 import LiteralType.*
+import ValueType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
@@ -42,14 +43,11 @@ object FunctionTest extends DefaultRunnableSpec {
       List("a", "b"),
       ETuple(List(EVariable("a"), EVariable("b")))
     ),
-    TQuantification(
-      "A",
-      TQuantification(
-        "B",
-        TFunction(
-          List(TVariable("A"), TVariable("B")),
-          TTuple(List(TVariable("A"), TVariable("B")))
-        )
+    TMulQuantification(
+      List("A", "B"),
+      TFunction(
+        List(TVariable("A"), TVariable("B")),
+        TTuple(List(TVariable("A"), TVariable("B")))
       )
     )
   )
@@ -90,14 +88,11 @@ object FunctionTest extends DefaultRunnableSpec {
       val expr = genericTwoTupleConstructor
       assertM(runSynth(expr))(
         equalTo(
-          TQuantification(
-            "A",
-            TQuantification(
-              "B",
-              TFunction(
-                List(TVariable("A"), TVariable("B")),
-                TTuple(List(TVariable("A"), TVariable("B")))
-              )
+          TMulQuantification(
+            List("A", "B"),
+            TFunction(
+              List(TVariable("A"), TVariable("B")),
+              TTuple(List(TVariable("A"), TVariable("B")))
             )
           )
         )
@@ -120,11 +115,11 @@ object FunctionTest extends DefaultRunnableSpec {
         equalTo(
           TTuple(
             List(
-              TLiteral(LTInt),
+              TValue(VTInt(1)),
               TStruct(
                 Map(
-                  "A" -> TLiteral(LTString),
-                  "B" -> TLiteral(LTBool)
+                  "A" -> TValue(VTString("A value")),
+                  "B" -> TValue(VTBool(true))
                 )
               )
             )
@@ -138,7 +133,9 @@ object FunctionTest extends DefaultRunnableSpec {
         List(ELiteral(LBool(false)), ELiteral(LInt(1)), ELiteral(LInt(1)))
       )
       assertM(runSynth(expr, stdCtx).flip)(
-        equalTo(AppError.TypeNotApplicableToLiteral(LTInt, LBool(false)))
+        equalTo(
+          AppError.TypeNotApplicableToLiteral(TLiteral(LTInt), LBool(false))
+        )
       )
     },
     testM("detects arity mismatch") {
@@ -153,7 +150,7 @@ object FunctionTest extends DefaultRunnableSpec {
         EFunction(Nil, ELiteral(LInt(1))),
         Nil
       )
-      assertM(runSynth(expr))(equalTo(TLiteral(LTInt)))
+      assertM(runSynth(expr))(equalTo(TValue(VTInt(1))))
     }
   )
 }

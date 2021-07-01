@@ -7,10 +7,11 @@ import zio.test.environment.*
 import Expression.*
 import Type.*
 import LiteralType.*
+import ValueType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
-import CommonTestFunctions.runSynth
+import CommonTestFunctions.*
 import scala.language.experimental
 import cats.data.NonEmptyListInstances
 
@@ -19,14 +20,23 @@ object IfTest extends DefaultRunnableSpec {
     testM("basic if") {
       val exp =
         EIf(ELiteral(LBool(true)), (ELiteral(LInt(2))), (ELiteral(LInt(4))))
-      assertM(runSynth(exp))(equalTo(TLiteral(LTInt)))
+      assertM(runSynth(exp))(
+        equalTo(
+          TSum(
+            Set(
+              TValue(VTInt(4)),
+              TValue(VTInt(2))
+            )
+          )
+        )
+      )
     },
     testM("doesnt allow other types of conditions") {
       val exp = EIf(ELiteral(LInt(1)), ELiteral(LInt(2)), ELiteral(LInt(4)))
       assertM(runSynth(exp).flip)(
         equalTo(
           AppError.TypeNotApplicableToLiteral(
-            LTBool,
+            TLiteral(LTBool),
             LInt(1)
           )
         )
@@ -51,7 +61,7 @@ object IfTest extends DefaultRunnableSpec {
         equalTo(
           TStruct(
             Map(
-              "A" -> TLiteral(LTBool)
+              "A" -> TValue(VTBool(true))
             )
           )
         )

@@ -66,6 +66,8 @@ def instantiateL(context: Context, alpha: String, b: Type): Eff[Context] = {
               delta <- gamma.drop(CVariable(beta))
             } yield delta
           }
+          case it: TMulQuantification =>
+            instantiateL(context, alpha, it.desugar)
           //InstLReach
           case TExistential(beta) => {
             context.insertInPlace(
@@ -135,6 +137,8 @@ def instantiateR(context: Context, alpha: String, a: Type): Eff[Context] =
               delta <- theta.drop(CMarker(beta1))
             } yield delta
           }
+          case it: TMulQuantification =>
+            instantiateR(context, alpha, it.desugar)
           //InstRReach
           case TExistential(beta) => {
             context.insertInPlace(

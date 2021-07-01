@@ -6,6 +6,7 @@ import zio.test.Assertion.*
 import zio.test.environment.*
 import Expression.*
 import Type.*
+import ValueType.*
 import LiteralType.*
 import Literal.*
 import ContextElement.*
@@ -27,8 +28,8 @@ object StructTest extends DefaultRunnableSpec {
         equalTo(
           TStruct(
             Map[String, Type](
-              "A"  -> TLiteral(LTString),
-              "B"  -> TLiteral(LTBool),
+              "A"  -> TValue(VTString("A value")),
+              "B"  -> TValue(VTBool(true)),
               "id" -> TestCommonExpressions.annotatedId.annotatedType
             )
           )
@@ -62,7 +63,7 @@ object StructTest extends DefaultRunnableSpec {
         equalTo(
           TStruct(
             Map[String, Type](
-              "A" -> TLiteral(LTString),
+              "A" -> TValue(VTString("asd")),
               "B" -> TLiteral(LTBool)
             )
           )
