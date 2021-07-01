@@ -42,7 +42,6 @@ object TypeApplicationTest extends DefaultRunnableSpec {
       LeftConstructorType
     )
   val LeftConstructorToEither =
-    // EFunction(List("a"), ETuple(List(ELiteral(LAtom("left")), EVariable("a"))))
     EAnnotation(
       EFunction(
         List("a"),
@@ -80,55 +79,63 @@ object TypeApplicationTest extends DefaultRunnableSpec {
     * let result : Either[Int, String] = left(1)
     */
   def spec = suite("EitherTest")(
-    // testM("constructing a Left value works") {
-    //   val expr = EAnnotation(
-    //     EFunctionApplication(LeftConstructor, List(ELiteral(LInt(2)))),
-    //     TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
-    //   )
-    //   assertM(runSynth(expr))(
-    //     equalTo(
-    //       TTypeApp(
-    //         TMulQuantification(
-    //           List("A", "B"),
-    //           TSum(
-    //             Set(
-    //               TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
-    //               TTuple(List(TValue(VTAtom("right")), TVariable("B")))
-    //             )
-    //           )
-    //         ),
-    //         List(TLiteral(LTInt), TLiteral(LTString))
-    //       )
-    //     )
-    //   )
-    // },
-    //  hf : [F, A, B](f: A => F[A, B], a: A): F[A, B]
-    testM("HKT") {
-      val hf = EAnnotation(
-        EFunction(
-          List("f", "a"),
-          EFunctionApplication(EVariable("f"), List(EVariable("a")))
-        ),
-        TMulQuantification(
-          List("F", "A", "B"),
-          TFunction(
-            List(
-              TFunction(
-                List(TVariable("A")),
-                TTypeApp(TVariable("F"), List(TVariable("A"), TVariable("B")))
-              ),
-              TVariable("A")
+    testM("constructing a Left value works") {
+      val expr = EAnnotation(
+        EFunctionApplication(LeftConstructor, List(ELiteral(LInt(2)))),
+        TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
+      )
+      assertM(runSynth(expr))(
+        equalTo(
+          TTypeApp(
+            TMulQuantification(
+              List("A", "B"),
+              TSum(
+                Set(
+                  TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
+                  TTuple(List(TValue(VTAtom("right")), TVariable("B")))
+                )
+              )
             ),
-            TTypeApp(TVariable("F"), List(TVariable("A"), TVariable("B")))
+            List(TLiteral(LTInt), TLiteral(LTString))
           )
         )
       )
-
-      val expr = EFunctionApplication(
-        hf,
-        List(LeftConstructorToEither, ELiteral(LInt(1)))
+    },
+    testM("constructing a nested applied type works") {
+      val ctx = Context(
+        Vector(
+          ContextElement.CTypeDefinition("Either", EitherType),
+          ContextElement.CTypeDefinition("Left", LeftConstructorType)
+        )
       )
-      assertM(runSynthDebug(expr))(
+      // a : [B, A](A) => Either[A, B] = something => Left(something)
+      // a(2) : Either[Int, String]
+      val expr = EAnnotation(
+        EFunctionApplication(
+          EAnnotation(
+            EFunction(
+              List("something"),
+              EFunctionApplication(
+                EVariable("Left"),
+                List(EVariable("something"))
+              )
+            ),
+            TMulQuantification(
+              List("X", "Y"),
+              TFunction(
+                List(TVariable("X")),
+                TTypeApp(
+                  TTypeRef("Either"),
+                  List(TVariable("X"), TVariable("Y"))
+                )
+              )
+            )
+          ),
+          List(ELiteral(LInt(2)))
+        ),
+        TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
+      )
+      assertM(runSynth(expr, ctx))(
         equalTo(
           TTypeApp(
             TMulQuantification(
@@ -145,42 +152,32 @@ object TypeApplicationTest extends DefaultRunnableSpec {
         )
       )
     }
-    // ,
-    // testM("constructing a nested applied type works") {
-    //   val ctx = Context(
-    //     Vector(
-    //       ContextElement.CTypeDefinition("Either", EitherType),
-    //       ContextElement.CTypeDefinition("Left", LeftConstructorType)
-    //     )
-    //   )
-    //   // a : [B, A](A) => Either[A, B] = something => Left(something)
-    //   // a(2) : Either[Int, String]
-    //   val expr = EAnnotation(
-    //     EFunctionApplication(
-    //       EAnnotation(
-    //         EFunction(
-    //           List("something"),
-    //           EFunctionApplication(
-    //             EVariable("Left"),
-    //             List(EVariable("something"))
-    //           )
-    //         ),
-    //         TMulQuantification(
-    //           List("B", "A"),
+    // //  hf : [F, A, B](f: A => F[A, B], a: A): F[A, B]
+    // testM("HKT") {
+    //   val hf = EAnnotation(
+    //     EFunction(
+    //       List("f", "a"),
+    //       EFunctionApplication(EVariable("f"), List(EVariable("a")))
+    //     ),
+    //     TMulQuantification(
+    //       List("F", "A", "B"),
+    //       TFunction(
+    //         List(
     //           TFunction(
     //             List(TVariable("A")),
-    //             TTypeApp(
-    //               TTypeRef("Either"),
-    //               List(TVariable("A"), TVariable("B"))
-    //             )
-    //           )
-    //         )
-    //       ),
-    //       List(ELiteral(LInt(2)))
-    //     ),
-    //     TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
+    //             TTypeApp(TVariable("F"), List(TVariable("A"), TVariable("B")))
+    //           ),
+    //           TVariable("A")
+    //         ),
+    //         TTypeApp(TVariable("F"), List(TVariable("A"), TVariable("B")))
+    //       )
+    //     )
     //   )
-    //   assertM(runSynthDebug(expr, ctx))(
+    //   val expr = EFunctionApplication(
+    //     hf,
+    //     List(LeftConstructorToEither, ELiteral(LInt(1)))
+    //   )
+    //   assertM(runSynthDebug(expr))(
     //     equalTo(
     //       TTypeApp(
     //         TMulQuantification(

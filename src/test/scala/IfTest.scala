@@ -17,13 +17,10 @@ import cats.data.NonEmptyListInstances
 
 object IfTest extends DefaultRunnableSpec {
   def spec = suite("IfTest")(
-    // TODO: FIXME, not working due to introduction of value types
-    // synthError: TypeNotApplicableToLiteral(_type = TValue(valueType = VTInt(it = 2)), literal = LInt(it = 4))
-    // we need to start searching for a common supertype when returning from an IF statement
     testM("basic if") {
       val exp =
         EIf(ELiteral(LBool(true)), (ELiteral(LInt(2))), (ELiteral(LInt(4))))
-      assertM(runSynthDebug(exp))(
+      assertM(runSynth(exp))(
         equalTo(
           TSum(
             Set(

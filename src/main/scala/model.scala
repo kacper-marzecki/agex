@@ -75,6 +75,8 @@ sealed trait Type {
       case _: Type.TMulQuantification => false
       case Type.TSum(types)           => types.forall(_.isMonotype)
       // TODO: is TTypeApp a monotype ? i dont think so, eg the arg can be quantified
+      case Type.TTypeApp(q, args) =>
+        false // args.forall(_.isMonotype) && q.isMonotype
       case Type.TFunction(args, ret) =>
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
@@ -102,26 +104,7 @@ object Type {
   // I get a sense that a type lambda and quantifications are not quite the same <duh>
   // maybe directly a new type : TypeLambda
   case class TTypeApp(_type: Type, args: List[Type]) extends Type {
-    lazy val appliedResult = _type match {
-      case TMulQuantification(names, _type) =>
-        if (names.size != args.size) {
-          Left(AppError.WrongArity(names.size, args.size))
-        } else {
-          Right(
-            names
-              .zip(args)
-              .foldLeft(_type) {
-                case (quantifiedType, (variableName, typeArg)) =>
-                  replaceVariable(variableName, quantifiedType, typeArg)
-              }
-          )
-        }
-      case it: TVariable => Right(this)
-      case other =>
-        Left(AppError.CannotApplyType(other))
-    }
-    val applyType = zio.ZIO.fromEither(appliedResult)
-    def applyT(context: Context) = applyContext(_type, context).flatMap {
+    def applyType(context: Context) = applyContext(_type, context).flatMap {
       case TMulQuantification(names, _type) =>
         if (names.size != args.size) {
           zio.ZIO.fail(AppError.WrongArity(names.size, args.size))
@@ -135,8 +118,9 @@ object Type {
               }
           )
         }
-      case it: TVariable => zio.ZIO.succeed(this)
-      case other         => zio.ZIO.fail(AppError.CannotApplyType(other))
+      // case it: TVariable    => zio.ZIO.succeed(this)
+      // case it: TExistential => zio.ZIO.succeed(this)
+      case other => zio.ZIO.fail(AppError.CannotApplyType(other))
     }
   }
 

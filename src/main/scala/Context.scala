@@ -86,7 +86,8 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     * TODO: improve this API, as it requires this ^ implicit contract
     */
   def drop(elements: List[ContextElement]): IO[ElementNotFound, Context] =
-    elements.headOption.map(drop(_)).getOrElse(succeed(this))
+    ZIO.foldRight(elements)(this)((a, acc) => acc.drop(a))
+  // elements.headOption.map(drop(_)).getOrElse(succeed(this))
 
   def getSolved(name: String): Option[Type] =
     elements.mapFilter {
@@ -163,10 +164,8 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       ZIO.foreach_(_type :: args)(
         checkIsWellFormed(context, _)
       ) *> it
-        .applyT(context)
+        .applyType(context)
         .unit
-    // is this check needed ?
-    // .flatMap(checkIsWellFormed(context, _))
     case TStruct(fieldTypes) =>
       ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
   }

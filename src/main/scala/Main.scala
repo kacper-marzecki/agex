@@ -106,8 +106,17 @@ def checksAgainst(
       }
     case (expression, it @ TTypeApp(tLambda, types)) => {
       it
-        .applyT(context)
+        .applyType(context)
         .flatMap {
+          case TTypeApp(TExistential(_), _) =>
+            for {
+              (typed, theta) <- synthesizesTo(context, expr)
+              (a, b) <- ZIO.tupled(
+                applyContext(typed._type, theta),
+                applyContext(_type, theta)
+              )
+              result <- subtype(theta, a, b)
+            } yield (typed, result)
           case it @ TTypeApp(TVariable(_), _) =>
             // rzut na taśmę, przekopiowane z case _ =>
             for {
@@ -195,14 +204,11 @@ def substitution(
         )
       }
     }
-    case it @ TTypeApp(TVariable(name), args) =>
+    case it @ TTypeApp(q, args) =>
       for {
-        quant <- substitution(context, TVariable(name), alpha, b)
+        quant <- substitution(context, q, alpha, b)
         args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
-        _     <- pPrint("KURWA", "KEK")
       } yield TTypeApp(quant, args)
-    case it: TTypeApp =>
-      it.applyType.flatMap(substitution(context, _, alpha, b))
     case TSum(types) =>
       ZIO.foreach(types)(substitution(context, _, alpha, b)).map(TSum(_))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
@@ -249,8 +255,14 @@ def occursIn(
     }
     case it: TMulQuantification => occursIn(context, alpha, it.desugar)
     // case it: TTypeApp       => it.applyType.flatMap(occursIn(context, alpha, _))
-    case it: TTypeApp => anyM(it._type :: it.args, occursIn(context, alpha, _))
-    case TSum(types)  => anyM(types, occursIn(context, alpha, _))
+    case it: TTypeApp =>
+      it.applyType(context)
+        .flatMap {
+          case it: TTypeApp =>
+            anyM(it._type :: it.args, occursIn(context, alpha, _))
+          case _ => ???
+        }
+    case TSum(types)        => anyM(types, occursIn(context, alpha, _))
     case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
@@ -288,6 +300,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         checkIsWellFormed(context, a)
           .as(context)
       }
+
       //<:->
       case (TFunction(args1, ret1), TFunction(args2, ret2)) => {
         for {
@@ -327,6 +340,10 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         }
       }
       //<:∀L
+      case (it: TMulQuantification, _) =>
+        subtype(context, it.desugar, b)
+      case (_, it: TMulQuantification) =>
+        subtype(context, a, it.desugar)
       case (TQuantification(name, quantType), _) => {
         for {
           alpha <- CompilerState.makeExistential
@@ -342,10 +359,6 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           result <- delta.drop(CMarker(alpha))
         } yield result
       }
-      case (it: TMulQuantification, _) =>
-        subtype(context, it.desugar, b)
-      case (_, it: TMulQuantification) =>
-        subtype(context, a, it.desugar)
       //<:∀R
       case (_, TQuantification(name, quantType)) => {
         for {
@@ -370,12 +383,27 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ) *>
           instantiateR(context, name, a)
       }
-      case (it: TTypeApp, _) =>
-        // TU LEŻY PROBLEM POGRZEBANY
-        it.applyType
+      // TODO: will need a rework to get HKT to work
+      case (TTypeApp(q1, args1), TTypeApp(q2, args2)) => {
+        for {
+          _ <- assertTrue(
+            args1.size == args2.size,
+            WrongArity(args2.size, args1.size)
+          )
+          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+            case (delta, (arg1, arg2)) =>
+              subtype(delta, arg1, arg2)
+          }
+          q1    <- applyContext(q1, theta)
+          q2    <- applyContext(q2, theta)
+          delta <- subtype(theta, q1, q2)
+        } yield delta
+      }
+      case (it @ TTypeApp(q, args), _) =>
+        it.applyType(context)
           .flatMap(subtype(context, _, b))
       case (_, it: TTypeApp) =>
-        it.applyType
+        it.applyType(context)
           .flatMap(subtype(context, a, _))
       case (TSum(subTypes), TSum(types)) =>
         ZIO
