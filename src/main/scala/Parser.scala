@@ -9,6 +9,8 @@ case class SString(value: String)          extends SExpToken
 case class SExp(elements: List[SExpToken]) extends SExpToken
 case class SInt(value: String)             extends SExpToken
 case class SFloat(value: String)           extends SExpToken
+case class SAtom(value: String)            extends SExpToken
+
 object Parser {
   val lowercaseAlphabet = List('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
     'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'u', 'w', 'y', 'v', 'z')
@@ -19,12 +21,21 @@ object Parser {
   val whitespaces0: P0[Unit] = pWhitespace.rep0.void
   // TODO differentiate between characters that are allowed on the first and n-th place in the identifier
   val pInt =
-    P.charIn(numbers).rep.map(it => SInt(it.toList.mkString))
+    P.charIn(numbers)
+      .rep
+      .map(it => SInt(it.toList.mkString))
+      .surroundedBy(whitespaces0)
   val pFloat =
-    (P.charIn(numbers).rep ~ P.char('.') ~ P.charIn(numbers).rep).map {
-      case ((before, point), after) =>
+    (P.charIn(numbers).rep ~ P.char('.') ~ P.charIn(numbers).rep)
+      .map { case ((before, point), after) =>
         SFloat(s"${before.toList.mkString}.${after.toList.mkString}")
-    }
+      }
+      .surroundedBy(whitespaces0)
+  val pAtom = (P.char(':') *> P
+    .charIn(
+      lowercaseAlphabet ::: uppercaseAlphabet ::: specialIdChars ::: numbers
+    )
+    .rep).map(it => SAtom(it.toList.mkString))
   val pIdentifier =
     (P.charIn(lowercaseAlphabet ::: uppercaseAlphabet ::: specialIdChars) ~ P
       .charIn(
@@ -38,15 +49,17 @@ object Parser {
 
   val pExpr = P.recursive[SExpToken] { r =>
     (P.char('(') *> P
-      .oneOf(pString :: pIdentifier :: r :: pInt :: Nil)
+      .oneOf(pString :: pIdentifier :: r :: pFloat.backtrack :: pInt :: Nil)
       .surroundedBy(whitespaces0)
       .rep
-      <* P.char(')')).map(it => SExp(it.toList))
+      <* P.char(')'))
+      .map(it => SExp(it.toList))
+      .surroundedBy(whitespaces0)
+
   }
 }
 
 object JsonStringUtil extends GenericStringUtil {
-  // Here are the rules for escaping in json
   lazy val decodeTable: Map[Char, Char] =
     Map(
       ('\\', '\\'),
