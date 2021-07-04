@@ -27,12 +27,12 @@ object ParserTest extends DefaultRunnableSpec {
     },
     test("Sexp test") {
       assert(Parser.pExpr.parseAll("""(+ a b)"""))(
-        equalTo(Right(SExp(List(SId("+"), SId("a"), SId("b")))))
+        equalTo(Right(SExpr(List(SId("+"), SId("a"), SId("b")))))
       )
     },
     test("Sexp test 2") {
       assert(Parser.pExpr.parseAll("""((a) )"""))(
-        equalTo(Right(SExp(List(SExp(List(SId("a")))))))
+        equalTo(Right(SExpr(List(SExpr(List(SId("a")))))))
       )
     },
     test("Sexp test 3") {
@@ -43,10 +43,10 @@ object ParserTest extends DefaultRunnableSpec {
       )(
         equalTo(
           Right(
-            SExp(
+            SExpr(
               List(
                 SId("if"),
-                SExp(
+                SExpr(
                   List(
                     SId("="),
                     SId("someVariable"),
@@ -54,8 +54,8 @@ object ParserTest extends DefaultRunnableSpec {
                     SFloat("41.1")
                   )
                 ),
-                SExp(List(SId("do-something"), SId(":ok"))),
-                SExp(List(SId("raise-error"), SId(":error")))
+                SExpr(List(SId("do-something"), SId(":ok"))),
+                SExpr(List(SId("raise-error"), SId(":error")))
               )
             )
           )
@@ -72,10 +72,10 @@ object ParserTest extends DefaultRunnableSpec {
       )(
         equalTo(
           Right(
-            SExp(
+            SExpr(
               List(
                 SId("if"),
-                SExp(
+                SExpr(
                   List(
                     SId("="),
                     SId("someVariable"),
@@ -83,8 +83,8 @@ object ParserTest extends DefaultRunnableSpec {
                     SFloat("41.1")
                   )
                 ),
-                SExp(List(SId("do-something"), SId(":ok"))),
-                SExp(List(SId("raise-error"), SId(":error")))
+                SExpr(List(SId("do-something"), SId(":ok"))),
+                SExpr(List(SId("raise-error"), SId(":error")))
               )
             )
           )
