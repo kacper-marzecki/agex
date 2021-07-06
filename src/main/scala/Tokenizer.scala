@@ -3,12 +3,14 @@ import Literal.*
 import cats.parse.{Parser0 as P0, Parser as P, Numbers}
 import cats.data.NonEmptyList
 
+// TODO add file location by using P.index
 sealed trait SExp
 case class SId(value: String)                extends SExp
 case class SString(value: String)            extends SExp
 case class SList(elements: List[SExp])       extends SExp
 case class SSquareList(elements: List[SExp]) extends SExp
 case class SCurlyList(elements: List[SExp])  extends SExp
+case class SMapLiteral(elements: List[SExp]) extends SExp
 
 object Tokenizer {
   val lowercaseAlphabet = List('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
@@ -17,40 +19,43 @@ object Tokenizer {
   val specialIdChars =
     List('?', '!', '&', '*', '/', '+', '-', '%', ':', '=', '.')
   val numbers                = (1 to 9).map(_.toString.charAt(0)).toList
-  val pWhitespace: P[Unit]   = P.charIn(" \t\r\n,").void
-  val whitespaces0: P0[Unit] = pWhitespace.rep0.void
+  val whitespaces0: P0[Unit] = P.charIn(" \t\r\n,").void.rep0.void
   val pIdentifier =
-    P
+    (P
       .charIn(
         lowercaseAlphabet ::: uppercaseAlphabet ::: specialIdChars ::: numbers
       )
       .rep
-      .surroundedBy(whitespaces0)
+      .surroundedBy(whitespaces0))
       .map(it => SId(it.toList.mkString))
   val pString = JsonStringUtil.escapedString('"').map(SString(_))
   val pExpr = P.recursive[SExp] { r =>
     def sexprParsers(
-        left: Char,
+        left: String,
         right: Char,
         ctor: List[SExp] => SExp
     ): List[P[SExp]] =
       List(
+        //two different parsers for an empty and non-empty case because of P vs P0 difference in cats-parse api
         r.rep
           .between(
-            P.char(left).surroundedBy(whitespaces0).void,
+            P.string(left).surroundedBy(whitespaces0).void,
             P.char(right).surroundedBy(whitespaces0).void
           )
           .map(it => ctor(it.toList))
           .surroundedBy(whitespaces0),
-        (P.char(left).void.surroundedBy(whitespaces0) ~ P
+        (P.string(left).void.surroundedBy(whitespaces0) ~ P
           .char(right)
           .void
           .surroundedBy(whitespaces0)).map(_ => ctor(Nil))
       )
-    val pExprs   = sexprParsers('(', ')', SList.apply)
-    val pExprsSB = sexprParsers('[', ']', SSquareList.apply)
-    val pExprsCB = sexprParsers('{', '}', SCurlyList.apply)
-    P.oneOf(pString :: pExprs ::: pExprsSB ::: pExprsCB ::: pIdentifier :: Nil)
+    val pExprs      = sexprParsers("(", ')', SList.apply)
+    val pExprsSB    = sexprParsers("[", ']', SSquareList.apply)
+    val pExprsCB    = sexprParsers("{", '}', SCurlyList.apply)
+    val pMapLiteral = sexprParsers("%{", '}', SMapLiteral.apply)
+    P.oneOf(
+      pString :: pExprs ::: pExprsSB ::: pExprsCB ::: pMapLiteral ::: pIdentifier :: Nil
+    )
   }
 }
 
