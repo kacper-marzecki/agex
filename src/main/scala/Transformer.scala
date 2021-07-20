@@ -9,13 +9,16 @@ import cats.Eval
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
-  def toAst(expr: SExp): Either[String, Expression] = {
     expr match {
-      case SId(it)         => ???
+      def toAst(expr: SExp): Either[String, Expression] = {
+      case SId(it) =>
+        // TODO parse literals like numbers, etc
+        ???
       case SString(it)     => ???
       case SList(xs)       => sexp(xs)
       case SSquareList(xs) =>
         // should transform into a list
+        // TODO done goofed, no list in my langugage
         ???
       case SCurlyList(xs)  => toAstList(xs).map(ETuple(_))
       case SMapLiteral(xs) => parseMap(xs)
@@ -40,16 +43,17 @@ object Transformer {
     ???
   }
 
-  // TODO should probably be specific to SExp to be able to include line info in the error
-  def paired[A](list: List[A]): Either[String, List[(A, A)]] =
-    if (list.size % 2 == 0) {
-      list.grouped(2).toList.foldMapM {
-        case one :: two :: Nil => Right(List((one, two)))
-        case _                 => Left("Should not occur")
-      }
-    } else {
-      Left("the number of elements must be even")
-    }
+  // Here we're handling special forms, and in the future I guess this would be the place to expand macros
+  // TODO think out: macros
+  def sexp(exprs: List[SExp]) = exprs match {
+    case Nil                 => ELiteral(LUnit)
+    case SId("fn") :: xs     => parseArgsAndBody(xs)
+    case SId(":") :: xs      => parseTypeAnnotation(xs)
+    case SId("let") :: xs    => parseLet(xs)
+    case SId("type") :: xs   => parseTypeAlias(xs)
+    case SId("if") :: xs     => parseIf(xs)
+    case functionApplication => parseFunctionApplication(functionApplication)
+  }
 
   def requireId(expr: SExp) = expr match {
     case it: SId => Right(it)
@@ -150,15 +154,15 @@ object Transformer {
     case _          => ???
   }
 
-  // Here we're handling special forms, and in the future I guess this would be the place to expand macros
-  // TODO think out: macros
-  def sexp(exprs: List[SExp]) = exprs match {
-    case Nil                 => ELiteral(LUnit)
-    case SId("fn") :: xs     => parseArgsAndBody(xs)
-    case SId(":") :: xs      => parseTypeAnnotation(xs)
-    case SId("let") :: xs    => parseLet(xs)
-    case SId("type") :: xs   => parseTypeAlias(xs)
-    case SId("if") :: xs     => parseIf(xs)
-    case functionApplication => parseFunctionApplication(functionApplication)
-  }
+  // TODO should probably be specific to SExp to be able to include line info in the error
+  def paired[A](list: List[A]): Either[String, List[(A, A)]] =
+    if (list.size % 2 == 0) {
+      list.grouped(2).toList.foldMapM {
+        case one :: two :: Nil => Right(List((one, two)))
+        case _                 => Left("Should not occur")
+      }
+    } else {
+      Left("the number of elements must be even")
+    }
+
 }
