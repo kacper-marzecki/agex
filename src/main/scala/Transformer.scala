@@ -9,8 +9,9 @@ import cats.Eval
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
+
+  def toAst(expr: SExp): Either[String, Expression] = {
     expr match {
-      def toAst(expr: SExp): Either[String, Expression] = {
       case SId(it) =>
         // TODO parse literals like numbers, etc
         ???
@@ -46,7 +47,7 @@ object Transformer {
   // Here we're handling special forms, and in the future I guess this would be the place to expand macros
   // TODO think out: macros
   def sexp(exprs: List[SExp]) = exprs match {
-    case Nil                 => ELiteral(LUnit)
+    case Nil                 => Right(ELiteral(LUnit))
     case SId("fn") :: xs     => parseArgsAndBody(xs)
     case SId(":") :: xs      => parseTypeAnnotation(xs)
     case SId("let") :: xs    => parseLet(xs)
@@ -79,7 +80,10 @@ object Transformer {
   def parseTypeAnnotation(xs: List[SExp]) =
     xs match {
       case annotatedTypeSexp :: expressionSexp :: Nil =>
-        parseType(annotatedTypeSexp)
+        for {
+          parsedType       <- parseType(annotatedTypeSexp)
+          parsedExpression <- toAst(expressionSexp)
+        } yield EAnnotation(parsedExpression, parsedType)
       case _ => Left("structure of a type annotation:  `(: type expression)`")
     }
 

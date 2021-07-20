@@ -26,6 +26,7 @@ object Expression {
   case class ETypeAlias(newName: String, targetType: Type, expr: Expression)
       extends Expression
   case class EStruct(fields: Map[String, Expression])        extends Expression
+  case class EMap(kvs: List[(Expression, Expression)])       extends Expression
   case class EFunction(args: List[String], body: Expression) extends Expression
   case class EFunctionApplication(fun: Expression, args: List[Expression])
       extends Expression
@@ -103,7 +104,8 @@ object Type {
   // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
   // I get a sense that a type lambda and quantifications are not quite the same <duh>
   // maybe directly a new type : TypeLambda
-  case class TTypeApp(_type: Type, args: List[Type]) extends Type {
+    case class TMap(kvs: List[(Type, Type)])              extends Type
+case class TTypeApp(_type: Type, args: List[Type]) extends Type {
     def applyType(context: Context) = applyContext(_type, context).flatMap {
       case TMulQuantification(names, _type) =>
         if (names.size != args.size) {
@@ -173,6 +175,8 @@ object TypedExpression {
       fields: Map[String, TypedExpression],
       _type: Type
   ) extends TypedExpression
+  case class TEMap(kvs: List[(TypedExpression, TypedExpression)], _type: Type)
+      extends TypedExpression
   case class TEFunction(args: List[String], body: TypedExpression, _type: Type)
       extends TypedExpression
   case class TEFunctionApplication(

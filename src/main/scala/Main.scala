@@ -66,6 +66,7 @@ def checksAgainst(
     expr: Expression,
     _type: Type
 ): Eff[(TypedExpression, Context)] = {
+  // TODO add check agains a map/struct ?
   (expr, _type) match {
     case (ELiteral(literal), TValue(valueType)) =>
       assertLiteralChecksAgainst(literal, valueType).as(
@@ -339,6 +340,9 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           }
         }
       }
+      case (TMap(kvsA), TMap(kvsB)) => {
+        ???
+      }
       //<:∀L
       case (it: TMulQuantification, _) =>
         subtype(context, it.desugar, b)
@@ -606,6 +610,15 @@ def synthesizesTo(
           (fieldName, typedField._type)
         }.toMap
       } yield (TEStruct(typedFields, TStruct(fieldTypes)), result.context)
+    }
+    case EMap(kvs) => {
+      for {
+        TEAggregation(keys, theta)   <- synthesizesTo(context, kvs.map(_._1))
+        TEAggregation(values, gamma) <- synthesizesTo(theta, kvs.map(_._2))
+        // TODO: detect duplicate keys, eg. {someFunction 1 someFunction "asd"}, widen the type of the value
+        kvs      = keys zip values
+        kvsTypes = kvs.map { case (k, v) => (k._type, v._type) }
+      } yield (TEMap(kvs, TMap(kvsTypes)), gamma)
     }
     case ELet(name, expr, body) => {
       for {
