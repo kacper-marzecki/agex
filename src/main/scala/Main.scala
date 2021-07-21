@@ -311,7 +311,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           )
           theta <- ZIO.foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
-              subtype(delta, arg1, arg2)
+              subtype(delta, arg2, arg1)
           }
           a     <- applyContext(ret1, theta)
           b     <- applyContext(ret2, theta)
