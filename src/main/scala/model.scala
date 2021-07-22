@@ -99,6 +99,9 @@ object Type {
   case class TTypeRef(targetType: String)           extends Type
   case class TStruct(fieldTypes: Map[String, Type]) extends Type
   case class TSum(types: Set[Type])                 extends Type
+    case class TMap(kvs: List[(Type, Type)])              extends Type
+  case class TSum(a: Type, b: Type)                     extends Type
+
   case class TFunction(args: List[Type], ret: Type) extends Type
   // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
   // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)

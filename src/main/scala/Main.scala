@@ -298,12 +298,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //<:Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
-        checkIsWellFormed(context, a)
-          .as(context)
+        checkIsWellFormed(context, a).as(context)
       }
 
       //<:->
-      case (TFunction(args1, ret1), TFunction(args2, ret2)) => {
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
         for {
           _ <- assertTrue(
             args1.size == args2.size,
@@ -317,6 +316,18 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
+      case (TMap(kvsA), TMap(kvsB)) => {
+        // firstly, the same subtyping logic as in functions apply
+        ???
+      }
+      case (TSum(a1, b1), TSum(a2, b2)) => {
+        ???
+      }
+      case (TTypeRef(a), other) => {
+        ???
+      }
+      case (other, TTypeRef(a)) => {
+        ???
       }
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
@@ -339,9 +350,6 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             subtype(delta, a, b)
           }
         }
-      }
-      case (TMap(kvsA), TMap(kvsB)) => {
-        ???
       }
       //<:∀L
       case (it: TMulQuantification, _) =>
@@ -424,6 +432,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             subtype(context, it, types.head),
             types.tail.map(subtype(context, it, _))
           )
+    // TODO: no subtyping Sum types
       case _ => {
         fail(CannotSubtype(context, a, b))
       }
