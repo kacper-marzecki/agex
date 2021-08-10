@@ -84,6 +84,15 @@ sealed trait Type {
     }
 }
 
+sealed trait TMapping {
+  def k: Type
+  def v: Type
+}
+object TMapping {
+  case class Required(k: Type, v: Type) extends TMapping
+  case class Optional(k: Type, v: Type) extends TMapping
+}
+
 object Type {
   case class TValue(valueType: ValueType)               extends Type
   case class TLiteral(literalType: LiteralType)         extends Type

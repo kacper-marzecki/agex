@@ -5,6 +5,7 @@ import ZIO.{succeed, fail}
 import AppError.*
 import Type.*
 import Literal.*
+import TMapping.*
 import LiteralType.*
 import ValueType.*
 import Expression.*
@@ -91,6 +92,13 @@ def checksAgainst(
         delta              <- theta.drop(typedVars)
       } yield (TEFunction(args, typedBody, _type), delta)
     }
+    case (expression, TSum(typeA, typeB)) => {
+      ZIO.firstSuccessOf(
+        checksAgainst(context, expression, typeA),
+        List(checksAgainst(context, expression, typeB))
+      )
+    }
+    // case (map: EMap, _type: TMap) => checksAgainstMap(context, map, _type)
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
@@ -226,6 +234,31 @@ def substitution(
       context
         .getTypeDefinition(name)
         .flatMap(substitution(context, _, alpha, b))
+    case TMap(mappings) => {
+      ZIO
+        .foreach(mappings) { it =>
+          it match {
+            case Required(k, v) =>
+              for {
+                substitutedK <- substitution(context, k, alpha, b)
+                substitutedV <- substitution(context, v, alpha, b)
+              } yield Required(substitutedK, substitutedV)
+            case Optional(k, v) =>
+              for {
+                substitutedK <- substitution(context, k, alpha, b)
+                substitutedV <- substitution(context, v, alpha, b)
+              } yield Optional(substitutedK, substitutedV)
+          }
+
+        }
+        .map(TMap(_))
+    }
+    case TSum(x, y) => {
+      for {
+        substitutedX <- substitution(context, x, alpha, b)
+        substitutedY <- substitution(context, y, alpha, b)
+      } yield TSum(substitutedX, substitutedY)
+    }
     case TStruct(fieldTypes) =>
       ZIO
         .foreach(fieldTypes) { case (k, v) =>
@@ -271,6 +304,13 @@ def occursIn(
       context.getTypeDefinition(name).flatMap(occursIn(context, alpha, _))
     case TStruct(fieldTypes) =>
       anyM(fieldTypes.values, occursIn(context, alpha, _))
+    case TMap(mappings) =>
+      anyM(
+        mappings.flatMap(it => List(it.k, it.v)),
+        occursIn(context, alpha, _)
+      )
+    case TSum(x, y) =>
+      anyM(List(x, y), occursIn(context, alpha, _))
   }
 }
 
@@ -323,12 +363,9 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (TSum(a1, b1), TSum(a2, b2)) => {
         ???
       }
-      case (TTypeRef(a), other) => {
-        ???
-      }
-      case (other, TTypeRef(a)) => {
-        ???
-      }
+      // May not be necessary, if checksAgainst transforms all TTypeRef's into concrete types
+      case (TTypeRef(a), other) => ???
+      case (other, TTypeRef(a)) => ???
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -620,15 +657,7 @@ def synthesizesTo(
         }.toMap
       } yield (TEStruct(typedFields, TStruct(fieldTypes)), result.context)
     }
-    case EMap(kvs) => {
-      for {
-        TEAggregation(keys, theta)   <- synthesizesTo(context, kvs.map(_._1))
-        TEAggregation(values, gamma) <- synthesizesTo(theta, kvs.map(_._2))
-        // TODO: detect duplicate keys, eg. {someFunction 1 someFunction "asd"}, widen the type of the value
-        kvs      = keys zip values
-        kvsTypes = kvs.map { case (k, v) => (k._type, v._type) }
-      } yield (TEMap(kvs, TMap(kvsTypes)), gamma)
-    }
+    case emap: EMap => mapSynthesizesTo(context, emap)
     case ELet(name, expr, body) => {
       for {
         (exprTyped, gamma) <- synthesizesTo(context, expr)
