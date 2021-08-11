@@ -52,10 +52,13 @@ def shouldHaveOptionalMapping(_type: Type): Boolean = {
 
   _type match {
     case TLiteral(literalType) => false
+    case it: TValue            => false
     // TODO at this stage, we don't know what the concrete type is - should we assume the optional mapping?
     // or maybe re-visit later when the type is known
     case TVariable(name)              => true
     case TExistential(name)           => true
+    case it: TMulQuantification       => true
+    case it: TTypeApp                 => true
     case TQuantification(name, _type) => true
     case TTuple(valueTypes)           => containsOptionalType(valueTypes)
     // should fetch the type from context

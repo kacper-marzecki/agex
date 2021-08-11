@@ -1,5 +1,7 @@
 import zio.*
 import zio.console.{putStrLn, Console, putStr}
+import cats.implicits.*
+import zio.interop.catz.*
 
 extension [A](it: Vector[A]) {
   def findIndexOf(elem: A) =
@@ -41,6 +43,16 @@ def assertNotM[R, E](check: ZIO[R, E, Boolean], failure: => E) = {
     ZIO.unit
   )
 }
+
+def findM[R, E, A, B](
+    collection: Iterable[A],
+    test: A => ZIO[R, E, B],
+    ifNotFound: => E
+): ZIO[R, E, B] =
+  collection.tailRecM {
+    case Nil     => ZIO.fail(ifNotFound)
+    case x :: xs => test(x).fold(_ => Left(xs), Right(_))
+  }
 
 // Checks if any element of the collection satisfies the given effectful predicate
 def anyM[R, E, A](

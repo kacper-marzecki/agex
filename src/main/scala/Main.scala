@@ -218,8 +218,6 @@ def substitution(
         quant <- substitution(context, q, alpha, b)
         args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
       } yield TTypeApp(quant, args)
-    case TSum(types) =>
-      ZIO.foreach(types)(substitution(context, _, alpha, b)).map(TSum(_))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO
@@ -296,7 +294,6 @@ def occursIn(
             anyM(it._type :: it.args, occursIn(context, alpha, _))
           case _ => ???
         }
-    case TSum(types)        => anyM(types, occursIn(context, alpha, _))
     case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
@@ -362,6 +359,15 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       case (TSum(a1, b1), TSum(a2, b2)) => {
         ???
+      }
+      case (TSum(x, y), other) => {
+        findM(
+          List(x, y),
+          subtype(context, _, other),
+          AppError.CannotSubtype(context, a, b)
+        )
+        // TODO findM a type in Sum that is a subtype of other
+        // anyM(List(a, b), it => subtype(context, ))
       }
       // May not be necessary, if checksAgainst transforms all TTypeRef's into concrete types
       case (TTypeRef(a), other) => ???
@@ -454,24 +460,26 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (_, it: TTypeApp) =>
         it.applyType(context)
           .flatMap(subtype(context, a, _))
-      case (TSum(subTypes), TSum(types)) =>
-        ZIO
-          .foldLeft(subTypes)(context) { case (delta, subType) =>
-            // TODO remove unsafe head
-            ZIO.firstSuccessOf(
-              subtype(context, subType, types.head),
-              types.tail.map(subtype(context, subType, _))
-            )
-          }
-      case (it, TSum(types)) =>
-        ZIO
-          .firstSuccessOf(
-            subtype(context, it, types.head),
-            types.tail.map(subtype(context, it, _))
-          )
-    // TODO: no subtyping Sum types
-      case _ => {
-        fail(CannotSubtype(context, a, b))
+      // Relic of a fukkup with a non-rebased feature, may need it later
+      // case (TSum(subTypes), TSum(types)) =>
+      //   ZIO
+      //     .foldLeft(subTypes)(context) { case (delta, subType) =>
+      //       // TODO remove unsafe head
+      //       ZIO.firstSuccessOf(
+      //         subtype(context, subType, types.head),
+      //         types.tail.map(subtype(context, subType, _))
+      //       )
+      //     }
+      // case (it, TSum(types)) =>
+      //   ZIO
+      //     .firstSuccessOf(
+      //       subtype(context, it, types.head),
+      //       types.tail.map(subtype(context, it, _))
+      //     )
+      // TODO: no subtyping Sum types
+      case it => {
+        pPrint(it, "#############") *>
+          fail(CannotSubtype(context, a, b))
       }
     }
   } yield delta
@@ -698,7 +706,7 @@ def synthesizesTo(
           ifFalse,
           ifTrueTyped._type
         ).fold(
-          _ => TSum(Set(ifTrueTyped._type, ifFalseTyped._type)),
+          _ => TSum(ifTrueTyped._type, ifFalseTyped._type),
           _ => ifTrueTyped._type
         )
       } yield (

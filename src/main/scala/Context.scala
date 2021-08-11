@@ -4,6 +4,7 @@ import ZIO.{fail, succeed}
 import AppError.*
 import ContextElement.*
 import Type.*
+import TMapping.*
 import cats.syntax.apply
 import scala.jdk.FunctionWrappers.RichToLongFunctionAsFunction1
 
@@ -159,7 +160,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       } else {
         fail(TypeNotKnown(context, targetType))
       }
-    case TSum(types) => ZIO.foreach_(types)(checkIsWellFormed(context, _))
+    case TSum(x, y) => ZIO.foreach_(List(x, y))(checkIsWellFormed(context, _))
     case it @ TTypeApp(_type, args) =>
       ZIO.foreach_(_type :: args)(
         checkIsWellFormed(context, _)
@@ -168,6 +169,10 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
         .unit
     case TStruct(fieldTypes) =>
       ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
+    case TMap(mappings) =>
+      ZIO.foreach_(mappings.flatMap(it => List(it.k, it.v)))(
+        checkIsWellFormed(context, _)
+      )
   }
 }
 
@@ -191,10 +196,11 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TMulQuantification(names, quantType) =>
       // 1:1 TQuantification port
       applyContext(quantType, context).map(TMulQuantification(names, _))
-    case TSum(types) =>
-      ZIO
-        .foreach(types)(applyContext(_, context))
-        .map(applied => TSum(applied))
+    case TSum(x, y) =>
+      for {
+        appliedX <- applyContext(x, context)
+        appliedY <- applyContext(y, context)
+      } yield TSum(appliedX, appliedY)
     case TTypeApp(quant, args) =>
       for {
         q <- applyContext(quant, context)
@@ -212,5 +218,23 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
           applyContext(v, context).map((k, _))
         }
         .map(TStruct.apply)
+    case TMap(mappings) =>
+      ZIO
+        .foreach(mappings) { it =>
+          it match {
+            case Required(k, v) =>
+              for {
+                appliedK <- applyContext(k, context)
+                appliedV <- applyContext(v, context)
+              } yield Required(appliedK, appliedV)
+            case Optional(k, v) =>
+              for {
+                appliedK <- applyContext(k, context)
+                appliedV <- applyContext(v, context)
+              } yield Optional(appliedK, appliedV)
+          }
+
+        }
+        .map(TMap(_))
   }
 }
