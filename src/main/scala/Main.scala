@@ -98,6 +98,26 @@ def checksAgainst(
         List(checksAgainst(context, expression, typeB))
       )
     }
+    case (expression, TAny) =>
+      for {
+        (expr, gamma) <- synthesizesTo(context, expression)
+      } yield (TEAny(expr), gamma)
+    case (EList(values), TList(valueType)) => {
+      for {
+        a <- synthesizesTo(context, values)
+        x <- ZIO.foldRight(values)(
+          TEAggregation(Nil, context)
+        ) { case (expression, result) =>
+          for {
+            (elemTyped, gamma) <- checksAgainst(
+              result.context,
+              expression,
+              valueType
+            )
+          } yield TEAggregation(elemTyped :: result.typed, gamma)
+        }
+      } yield (TEList(x.typed, TList(valueType)), x.context)
+    }
     // case (map: EMap, _type: TMap) => checksAgainstMap(context, map, _type)
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
@@ -195,6 +215,8 @@ def substitution(
   a match {
     case _: TLiteral     => succeed(a)
     case _: TValue       => succeed(a)
+    case TAny            => succeed(a)
+    case TNothing        => succeed(a)
     case TVariable(name) => if (name == alpha) succeed(b) else succeed(a)
     case TQuantification(name, quantType) => {
       if (name == alpha) {
@@ -223,6 +245,9 @@ def substitution(
       ZIO
         .foreach(valueTypes)(substitution(context, _, alpha, b))
         .map(TTuple(_))
+    case TList(valueType) =>
+      substitution(context, valueType, alpha, b)
+        .map(TList(_))
     case TFunction(args, ret) =>
       for {
         argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
@@ -275,6 +300,8 @@ def occursIn(
   a match {
     case TLiteral(_)     => succeed(false)
     case TValue(_)       => succeed(false)
+    case TAny            => succeed(false)
+    case TNothing        => succeed(false)
     case TVariable(name) => succeed(alpha == name)
     case TFunction(args, ret) =>
       anyM(ret :: args, occursIn(context, alpha, _))
@@ -295,6 +322,8 @@ def occursIn(
           case _ => ???
         }
     case TExistential(name) => succeed(alpha == name)
+    case TList(valueType) =>
+      occursIn(context, alpha, valueType)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
     case TTypeRef(name) =>
@@ -325,6 +354,8 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (TValue(value), TValue(other)) =>
         assertTrue(value == other, TypesNotEqual(a, b))
           .as(context)
+      case (_, TAny)     => succeed(context)
+      case (TNothing, _) => succeed(context)
       case (TValue(value), TLiteral(literalType)) =>
         subtype(context, value.literalType, b)
       //<:Var
@@ -337,7 +368,6 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
         checkIsWellFormed(context, a).as(context)
       }
-
       //<:->
       case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
         for {
@@ -585,6 +615,11 @@ def synthesizesTo(
     } yield TEAggregation(elemTyped :: result.typed, gamma)
   }
 
+def commonSupertype(zero: Type, iterable: Iterable[Type]): Type = {
+  // hacky, needs a proper implementation
+  iterable.fold(zero)((a, b) => TSum(a, b))
+}
+
 // Figure 11. Algorithmic typing
 def synthesizesTo(
     context: Context,
@@ -649,6 +684,16 @@ def synthesizesTo(
         TEFunction(args, typedRet, functionType),
         delta
       )
+    }
+    case EList(values) => {
+      for {
+        synthedValues <- synthesizesTo(context, values)
+        types = synthedValues.typed.map(_._type)
+      } yield types match {
+        case x :: xs =>
+          (TEList(synthedValues.typed, TList(commonSupertype(x, xs))), context)
+        case Nil => (TEList(synthedValues.typed, TList(TNothing)), context)
+      }
     }
     case ETuple(values) => {
       for {
