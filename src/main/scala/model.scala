@@ -26,6 +26,7 @@ object Expression {
   case class ETypeAlias(newName: String, targetType: Type, expr: Expression)
       extends Expression
   case class EStruct(fields: Map[String, Expression])        extends Expression
+  case class EMap(kvs: List[(Expression, Expression)])       extends Expression
   case class EFunction(args: List[String], body: Expression) extends Expression
   case class EFunctionApplication(fun: Expression, args: List[Expression])
       extends Expression
@@ -73,7 +74,7 @@ sealed trait Type {
     this match {
       case _: Type.TQuantification    => false
       case _: Type.TMulQuantification => false
-      case Type.TSum(types)           => types.forall(_.isMonotype)
+      case Type.TSum(x, y)            => x.isMonotype && y.isMonotype
       // TODO: is TTypeApp a monotype ? i dont think so, eg the arg can be quantified
       case Type.TTypeApp(q, args) =>
         false // args.forall(_.isMonotype) && q.isMonotype
@@ -81,6 +82,15 @@ sealed trait Type {
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
     }
+}
+
+sealed trait TMapping {
+  def k: Type
+  def v: Type
+}
+object TMapping {
+  case class Required(k: Type, v: Type) extends TMapping
+  case class Optional(k: Type, v: Type) extends TMapping
 }
 
 object Type {
@@ -97,7 +107,10 @@ object Type {
   case class TTuple(valueTypes: List[Type])         extends Type
   case class TTypeRef(targetType: String)           extends Type
   case class TStruct(fieldTypes: Map[String, Type]) extends Type
-  case class TSum(types: Set[Type])                 extends Type
+  // case class TSum(types: Set[Type])                 extends Type
+  case class TMap(kvs: List[TMapping]) extends Type
+  case class TSum(a: Type, b: Type)    extends Type
+
   case class TFunction(args: List[Type], ret: Type) extends Type
   // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
   // If so, we would have to rewrite instantiation rules to work with several quantificators (not sure how to even start)
@@ -136,7 +149,7 @@ object Type {
       case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
-      case TSum(types)          => TSum(types.map(repl))
+      case TSum(x, y)           => TSum(repl(x), repl(y))
       case other                => other
     }
   }
@@ -173,6 +186,8 @@ object TypedExpression {
       fields: Map[String, TypedExpression],
       _type: Type
   ) extends TypedExpression
+  case class TEMap(kvs: List[(TypedExpression, TypedExpression)], _type: Type)
+      extends TypedExpression
   case class TEFunction(args: List[String], body: TypedExpression, _type: Type)
       extends TypedExpression
   case class TEFunctionApplication(

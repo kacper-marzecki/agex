@@ -5,6 +5,7 @@ import ZIO.{succeed, fail}
 import AppError.*
 import Type.*
 import Literal.*
+import TMapping.*
 import LiteralType.*
 import ValueType.*
 import Expression.*
@@ -66,6 +67,7 @@ def checksAgainst(
     expr: Expression,
     _type: Type
 ): Eff[(TypedExpression, Context)] = {
+  // TODO add check agains a map/struct ?
   (expr, _type) match {
     case (ELiteral(literal), TValue(valueType)) =>
       assertLiteralChecksAgainst(literal, valueType).as(
@@ -90,6 +92,13 @@ def checksAgainst(
         delta              <- theta.drop(typedVars)
       } yield (TEFunction(args, typedBody, _type), delta)
     }
+    case (expression, TSum(typeA, typeB)) => {
+      ZIO.firstSuccessOf(
+        checksAgainst(context, expression, typeA),
+        List(checksAgainst(context, expression, typeB))
+      )
+    }
+    // case (map: EMap, _type: TMap) => checksAgainstMap(context, map, _type)
     //Decl∀I
     case (expression, TQuantification(name, quantType)) => {
       val variable = CVariable(name)
@@ -209,8 +218,6 @@ def substitution(
         quant <- substitution(context, q, alpha, b)
         args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
       } yield TTypeApp(quant, args)
-    case TSum(types) =>
-      ZIO.foreach(types)(substitution(context, _, alpha, b)).map(TSum(_))
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
       ZIO
@@ -225,6 +232,31 @@ def substitution(
       context
         .getTypeDefinition(name)
         .flatMap(substitution(context, _, alpha, b))
+    case TMap(mappings) => {
+      ZIO
+        .foreach(mappings) { it =>
+          it match {
+            case Required(k, v) =>
+              for {
+                substitutedK <- substitution(context, k, alpha, b)
+                substitutedV <- substitution(context, v, alpha, b)
+              } yield Required(substitutedK, substitutedV)
+            case Optional(k, v) =>
+              for {
+                substitutedK <- substitution(context, k, alpha, b)
+                substitutedV <- substitution(context, v, alpha, b)
+              } yield Optional(substitutedK, substitutedV)
+          }
+
+        }
+        .map(TMap(_))
+    }
+    case TSum(x, y) => {
+      for {
+        substitutedX <- substitution(context, x, alpha, b)
+        substitutedY <- substitution(context, y, alpha, b)
+      } yield TSum(substitutedX, substitutedY)
+    }
     case TStruct(fieldTypes) =>
       ZIO
         .foreach(fieldTypes) { case (k, v) =>
@@ -262,7 +294,6 @@ def occursIn(
             anyM(it._type :: it.args, occursIn(context, alpha, _))
           case _ => ???
         }
-    case TSum(types)        => anyM(types, occursIn(context, alpha, _))
     case TExistential(name) => succeed(alpha == name)
     case TTuple(valueTypes) =>
       anyM(valueTypes, occursIn(context, alpha, _))
@@ -270,6 +301,13 @@ def occursIn(
       context.getTypeDefinition(name).flatMap(occursIn(context, alpha, _))
     case TStruct(fieldTypes) =>
       anyM(fieldTypes.values, occursIn(context, alpha, _))
+    case TMap(mappings) =>
+      anyM(
+        mappings.flatMap(it => List(it.k, it.v)),
+        occursIn(context, alpha, _)
+      )
+    case TSum(x, y) =>
+      anyM(List(x, y), occursIn(context, alpha, _))
   }
 }
 
@@ -297,12 +335,11 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       }
       //<:Exvar
       case (TExistential(name1), TExistential(name2)) if name1 == name2 => {
-        checkIsWellFormed(context, a)
-          .as(context)
+        checkIsWellFormed(context, a).as(context)
       }
 
       //<:->
-      case (TFunction(args1, ret1), TFunction(args2, ret2)) => {
+      case (TFunction(args1, ret1), TFunction(args2, ret2)) =>
         for {
           _ <- assertTrue(
             args1.size == args2.size,
@@ -310,13 +347,31 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           )
           theta <- ZIO.foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
-              subtype(delta, arg1, arg2)
+              subtype(delta, arg2, arg1)
           }
           a     <- applyContext(ret1, theta)
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
+      case (TMap(kvsA), TMap(kvsB)) => {
+        // firstly, the same subtyping logic as in functions apply
+        ???
       }
+      case (TSum(a1, b1), TSum(a2, b2)) => {
+        ???
+      }
+      case (TSum(x, y), other) => {
+        findM(
+          List(x, y),
+          subtype(context, _, other),
+          AppError.CannotSubtype(context, a, b)
+        )
+        // TODO findM a type in Sum that is a subtype of other
+        // anyM(List(a, b), it => subtype(context, ))
+      }
+      // May not be necessary, if checksAgainst transforms all TTypeRef's into concrete types
+      case (TTypeRef(a), other) => ???
+      case (other, TTypeRef(a)) => ???
       case (TTuple(typesA), TTuple(typesB)) => {
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
@@ -405,23 +460,26 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       case (_, it: TTypeApp) =>
         it.applyType(context)
           .flatMap(subtype(context, a, _))
-      case (TSum(subTypes), TSum(types)) =>
-        ZIO
-          .foldLeft(subTypes)(context) { case (delta, subType) =>
-            // TODO remove unsafe head
-            ZIO.firstSuccessOf(
-              subtype(context, subType, types.head),
-              types.tail.map(subtype(context, subType, _))
-            )
-          }
-      case (it, TSum(types)) =>
-        ZIO
-          .firstSuccessOf(
-            subtype(context, it, types.head),
-            types.tail.map(subtype(context, it, _))
-          )
-      case _ => {
-        fail(CannotSubtype(context, a, b))
+      // Relic of a fukkup with a non-rebased feature, may need it later
+      // case (TSum(subTypes), TSum(types)) =>
+      //   ZIO
+      //     .foldLeft(subTypes)(context) { case (delta, subType) =>
+      //       // TODO remove unsafe head
+      //       ZIO.firstSuccessOf(
+      //         subtype(context, subType, types.head),
+      //         types.tail.map(subtype(context, subType, _))
+      //       )
+      //     }
+      // case (it, TSum(types)) =>
+      //   ZIO
+      //     .firstSuccessOf(
+      //       subtype(context, it, types.head),
+      //       types.tail.map(subtype(context, it, _))
+      //     )
+      // TODO: no subtyping Sum types
+      case it => {
+        pPrint(it, "#############") *>
+          fail(CannotSubtype(context, a, b))
       }
     }
   } yield delta
@@ -607,6 +665,7 @@ def synthesizesTo(
         }.toMap
       } yield (TEStruct(typedFields, TStruct(fieldTypes)), result.context)
     }
+    case emap: EMap => mapSynthesizesTo(context, emap)
     case ELet(name, expr, body) => {
       for {
         (exprTyped, gamma) <- synthesizesTo(context, expr)
@@ -647,7 +706,7 @@ def synthesizesTo(
           ifFalse,
           ifTrueTyped._type
         ).fold(
-          _ => TSum(Set(ifTrueTyped._type, ifFalseTyped._type)),
+          _ => TSum(ifTrueTyped._type, ifFalseTyped._type),
           _ => ifTrueTyped._type
         )
       } yield (

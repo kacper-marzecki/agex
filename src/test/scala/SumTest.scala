@@ -17,10 +17,8 @@ import cats.data.NonEmptyListInstances
 object SumTest extends DefaultRunnableSpec {
 
   val stringOrInt = TSum(
-    Set(
-      TLiteral(LTString),
-      TLiteral(LTInt)
-    )
+    TLiteral(LTString),
+    TLiteral(LTInt)
   )
 
   def spec = suite("SumTest")(

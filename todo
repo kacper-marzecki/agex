@@ -33,6 +33,19 @@
         - maybe model them as just set of types ?
     - think out: adding `any` type ? 
     - think out: representing optionality in product types { optField ?: Int. reqField :  } 
+- Map 
+    - detect duplicate keys, eg. {someFunction 1 someFunction "asd"}, widen the type of the value
+    - special typing of map access:
+        map = %{
+            1 => "asd",
+            2 => 4
+        }
+        someInt: Int = 123
+        map[1]       // : "asd"
+        map[2]       // :  4
+        map[someInt] // : "asd" | 4 | nil
+        map["asd"]   // : nil
+        const res: Int = map[2]       
 - General: 
     - struct field access expression (dot ?)
         - maybe it should not be specific to struct
@@ -41,3 +54,13 @@
         - think out: as fields are atoms, maybe clojure could have some interesting ideas: e.g. atoms as functions over structs
     - NOT_IMPLEMENTED expression, akin to ??? in scala
     - add list primitive 
+
+
+
+
+
+
+
+
+
+

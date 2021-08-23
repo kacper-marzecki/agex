@@ -19,10 +19,8 @@ object TypeApplicationTest extends DefaultRunnableSpec {
   val EitherType = TMulQuantification(
     List("A", "B"),
     TSum(
-      Set(
-        TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
-        TTuple(List(TValue(VTAtom("right")), TVariable("B")))
-      )
+      TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
+      TTuple(List(TValue(VTAtom("right")), TVariable("B")))
     )
   )
   val LeftConstructorType = TMulQuantification(
@@ -90,10 +88,8 @@ object TypeApplicationTest extends DefaultRunnableSpec {
             TMulQuantification(
               List("A", "B"),
               TSum(
-                Set(
-                  TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
-                  TTuple(List(TValue(VTAtom("right")), TVariable("B")))
-                )
+                TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
+                TTuple(List(TValue(VTAtom("right")), TVariable("B")))
               )
             ),
             List(TLiteral(LTInt), TLiteral(LTString))
@@ -135,16 +131,16 @@ object TypeApplicationTest extends DefaultRunnableSpec {
         ),
         TTypeApp(EitherType, List(TLiteral(LTInt), TLiteral(LTString)))
       )
-      assertM(runSynth(expr, ctx))(
+      assertM(
+        runSynth(expr, ctx)
+      )(
         equalTo(
           TTypeApp(
             TMulQuantification(
               List("A", "B"),
               TSum(
-                Set(
-                  TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
-                  TTuple(List(TValue(VTAtom("right")), TVariable("B")))
-                )
+                TTuple(List(TValue(VTAtom("left")), TVariable("A"))),
+                TTuple(List(TValue(VTAtom("right")), TVariable("B")))
               )
             ),
             List(TLiteral(LTInt), TLiteral(LTString))

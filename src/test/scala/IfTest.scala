@@ -23,10 +23,8 @@ object IfTest extends DefaultRunnableSpec {
       assertM(runSynth(exp))(
         equalTo(
           TSum(
-            Set(
-              TValue(VTInt(4)),
-              TValue(VTInt(2))
-            )
+            TValue(VTInt(2)),
+            TValue(VTInt(4))
           )
         )
       )
