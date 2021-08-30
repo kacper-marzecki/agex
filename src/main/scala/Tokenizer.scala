@@ -43,7 +43,8 @@ object Tokenizer {
             P.char(right).surroundedBy(whitespaces0).void
           )
           .map(it => ctor(it.toList))
-          .surroundedBy(whitespaces0),
+          .surroundedBy(whitespaces0)
+          .backtrack,
         (P.string(left).void.surroundedBy(whitespaces0) ~ P
           .char(right)
           .void
