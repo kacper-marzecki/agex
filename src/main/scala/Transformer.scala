@@ -14,13 +14,11 @@ object Transformer {
     expr match {
       case SId(it) =>
         // TODO parse literals like numbers, etc
-        ???
-      case SString(it)     => ???
-      case SList(xs)       => sexp(xs)
+        parseId(it)
+      case SString(it) => ???
+      case SList(xs)   => sexp(xs)
       case SSquareList(xs) =>
-        // should transform into a list
-        // TODO done goofed, no list in my langugage
-        ???
+        toAstList(xs).map(EList(_))
       case SCurlyList(xs)  => toAstList(xs).map(ETuple(_))
       case SMapLiteral(xs) => parseMap(xs)
       // TODO missing structs
@@ -41,7 +39,6 @@ object Transformer {
       //     .map(pairs => EStruct(pairs.toMap))
       // }
     }
-    ???
   }
 
   // Here we're handling special forms, and in the future I guess this would be the place to expand macros
@@ -71,6 +68,23 @@ object Transformer {
       case _ =>
         Left("structure of an anonymous function: `(fn [arg1 arg2] (body))`")
     }
+
+  def parseId(str: String) = {
+    str match {
+      case str if str.startsWith(":") =>
+        Right(ELiteral(LAtom(str.substring(1))))
+      case "()"  => Right(ELiteral(LUnit))
+      case "nil" => Right(ELiteral(LNil))
+      case _ =>
+        List(
+          str.toIntOption.map(it => ELiteral(LInt(it))),
+          str.toBooleanOption.map(it => ELiteral(LBool(it))),
+          str.toFloatOption.map(it => ELiteral(LFloat(it)))
+        ).find(_.isDefined)
+          .flatten
+          .fold(Right(EVariable((str))))(Right(_))
+    }
+  }
 
   def parseMap(xs: List[SExp]) =
     // paired(xs).map(_.map { case (l, r) => EMap })

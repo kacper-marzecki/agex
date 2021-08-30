@@ -37,4 +37,18 @@ object CommonTestFunctions {
       .map(_._type)
       .provideSomeLayer[zio.ZEnv](CompilerState.live)
       .tapError(if (debug) prettyPrint(_, "synthError") else _ => ZIO.unit)
+
+  def stringToExpr(str: String) = {
+    for {
+      sexpr <- ZIO.fromEither(Tokenizer.pExpr.parseAll(str))
+      ast   <- ZIO.fromEither(Transformer.toAst(sexpr))
+    } yield ast
+  }
+
+  def parseAndSynth(str: String) = {
+    for {
+      expr    <- stringToExpr(str)
+      synthed <- runSynth(expr)
+    } yield (expr, synthed)
+  }
 }

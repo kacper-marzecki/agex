@@ -1,3 +1,4 @@
+import Type.TAny
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -27,6 +28,7 @@ object Expression {
       extends Expression
   case class EStruct(fields: Map[String, Expression])        extends Expression
   case class EMap(kvs: List[(Expression, Expression)])       extends Expression
+  case class EList(values: List[Expression])                 extends Expression
   case class EFunction(args: List[String], body: Expression) extends Expression
   case class EFunctionApplication(fun: Expression, args: List[Expression])
       extends Expression
@@ -94,6 +96,8 @@ object TMapping {
 }
 
 object Type {
+  case object TAny                                      extends Type
+  case object TNothing                                  extends Type
   case class TValue(valueType: ValueType)               extends Type
   case class TLiteral(literalType: LiteralType)         extends Type
   case class TVariable(name: String)                    extends Type
@@ -108,6 +112,7 @@ object Type {
   case class TTypeRef(targetType: String)           extends Type
   case class TStruct(fieldTypes: Map[String, Type]) extends Type
   // case class TSum(types: Set[Type])                 extends Type
+  case class TList(valueType: Type)    extends Type
   case class TMap(kvs: List[TMapping]) extends Type
   case class TSum(a: Type, b: Type)    extends Type
 
@@ -161,6 +166,7 @@ sealed trait TypedExpression {
 object TypedExpression {
   case class TEVariable(name: String, _type: Type) extends TypedExpression
   case class TELiteral(it: Literal, _type: Type)   extends TypedExpression
+  case class TEAny(expression: TypedExpression, _type: Type = TAny) extends TypedExpression 
   case class TELet(
       name: String,
       value: TypedExpression,
@@ -186,6 +192,8 @@ object TypedExpression {
       fields: Map[String, TypedExpression],
       _type: Type
   ) extends TypedExpression
+  case class TEList(values: List[TypedExpression], _type: Type)
+      extends TypedExpression
   case class TEMap(kvs: List[(TypedExpression, TypedExpression)], _type: Type)
       extends TypedExpression
   case class TEFunction(args: List[String], body: TypedExpression, _type: Type)

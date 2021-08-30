@@ -128,8 +128,11 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
 /// Fig 7
 def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
   _type match {
-    case _: TLiteral => ZIO.unit
-    case _: TValue   => ZIO.unit
+    case _: TLiteral      => ZIO.unit
+    case _: TValue        => ZIO.unit
+    case TAny             => ZIO.unit
+    case TNothing         => ZIO.unit
+    case TList(valueType) => checkIsWellFormed(context, valueType)
     case TVariable(name) =>
       if (context.hasVariable(name)) ZIO.unit
       else
@@ -144,8 +147,6 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       context
         .addAll(it.names.map(CVariable(_)))
         .flatMap(checkIsWellFormed(_, it._type))
-
-    // checkIsWellFormed(context, it.desugar)
     case TExistential(name) =>
       if (context.hasExistential(name) || context.getSolved(name).isDefined) {
         ZIO.unit
@@ -179,9 +180,12 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
 // Fig 8
 def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
   _type match {
-    case TValue(_)    => succeed(_type)
-    case TLiteral(_)  => succeed(_type)
-    case TVariable(_) => succeed(_type)
+    case TValue(_)        => succeed(_type)
+    case TLiteral(_)      => succeed(_type)
+    case TVariable(_)     => succeed(_type)
+    case TAny             => succeed(_type)
+    case TNothing         => succeed(_type)
+    case TList(valueType) => applyContext(valueType, context).map(TList(_))
     case TExistential(name) => {
       context.getSolved(name).fold(succeed(_type))(applyContext(_, context))
     }

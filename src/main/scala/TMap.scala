@@ -51,10 +51,11 @@ def shouldHaveOptionalMapping(_type: Type): Boolean = {
     types.find(shouldHaveOptionalMapping).isDefined
 
   _type match {
-    case TLiteral(literalType) => false
-    case it: TValue            => false
-    // TODO at this stage, we don't know what the concrete type is - should we assume the optional mapping?
-    // or maybe re-visit later when the type is known
+    case TLiteral(literalType)        => false
+    case it: TValue                   => false
+    case TList(valueType)             => shouldHaveOptionalMapping(valueType)
+    case TAny                         => true
+    case TNothing                     => false
     case TVariable(name)              => true
     case TExistential(name)           => true
     case it: TMulQuantification       => true

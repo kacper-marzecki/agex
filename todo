@@ -54,7 +54,8 @@
         - think out: as fields are atoms, maybe clojure could have some interesting ideas: e.g. atoms as functions over structs
     - NOT_IMPLEMENTED expression, akin to ??? in scala
     - add list primitive 
-
+====================================
+test:testOnly *ListTest
 
 
 
