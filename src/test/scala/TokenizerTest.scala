@@ -11,8 +11,8 @@ object TokenizerTest extends DefaultRunnableSpec {
 
   def spec = suite("TokenizerTest")(
     test("string test") {
-      assert(Tokenizer.pExpr.parseAll("""("as\" d ")"""))(
-        eq(SList(List(SString("as\" d "))))
+      assert(Tokenizer.pExpr.parseAll(""" "asd \" a" """))(
+        eq(SString("asd \" a"))
       )
     },
     test("other test") {

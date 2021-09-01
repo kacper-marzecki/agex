@@ -5,6 +5,7 @@ import cats.data.NonEmptyList
 import cats.implicits.*
 import scala.runtime.stdLibPatches.language.experimental.namedTypeArguments
 import cats.Eval
+import cats.implicits.*
 
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -15,7 +16,7 @@ object Transformer {
       case SId(it) =>
         // TODO parse literals like numbers, etc
         parseId(it)
-      case SString(it) => ???
+      case SString(it) => Right(ELiteral(LString(it)))
       case SList(xs)   => sexp(xs)
       case SSquareList(xs) =>
         toAstList(xs).map(EList(_))
@@ -87,9 +88,9 @@ object Transformer {
   }
 
   def parseMap(xs: List[SExp]) =
-    // paired(xs).map(_.map { case (l, r) => EMap })
-    // TODO done goofed => no map in my language
-    ???
+    xs.foldMapM(toAst(_).map(List(_)))
+      .flatMap(paired)
+      .map(EMap(_))
 
   def parseTypeAnnotation(xs: List[SExp]) =
     xs match {

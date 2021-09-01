@@ -34,7 +34,7 @@ def mapSynthesizesTo(
       for {
         (kTyped, gamma) <- synthesizesTo(ctx, k)
         mapping =
-          if (shouldHaveOptionalMapping(kTyped._type)) Optional.apply
+          if (shouldHaveOptionalMapping(kTyped._type, gamma)) Optional.apply
           else Required.apply
         (vTyped, delta) <- synthesizesTo(gamma, v)
       } yield (
@@ -46,18 +46,22 @@ def mapSynthesizesTo(
   } yield (TEMap(kvs, TMap(mappings)), ctx)
 }
 
-def shouldHaveOptionalMapping(_type: Type): Boolean = {
+def shouldHaveOptionalMapping(_type: Type, context: Context): Boolean = {
   val containsOptionalType = (types: Iterable[Type]) =>
-    types.find(shouldHaveOptionalMapping).isDefined
+    types.find(shouldHaveOptionalMapping(_, context)).isDefined
 
   _type match {
-    case TLiteral(literalType)        => false
-    case it: TValue                   => false
-    case TList(valueType)             => shouldHaveOptionalMapping(valueType)
-    case TAny                         => true
-    case TNothing                     => false
-    case TVariable(name)              => true
-    case TExistential(name)           => true
+    case TLiteral(literalType) => false
+    case it: TValue            => false
+    case TList(valueType)      => shouldHaveOptionalMapping(valueType, context)
+    case TAny                  => true
+    case TNothing              => false
+    case TVariable(name)       => true
+    case TExistential(name) =>
+      context
+        .getSolved(name)
+        .map(shouldHaveOptionalMapping(_, context))
+        .getOrElse(false)
     case it: TMulQuantification       => true
     case it: TTypeApp                 => true
     case TQuantification(name, _type) => true
