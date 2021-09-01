@@ -48,7 +48,7 @@ object Tokenizer {
         (P.string(left).void.surroundedBy(whitespaces0) ~ P
           .char(right)
           .void
-          .surroundedBy(whitespaces0)).map(_ => ctor(Nil))
+          .surroundedBy(whitespaces0)).map(_ => ctor(Nil)).backtrack
       )
     val pExprs      = sexprParsers("(", ')', SList.apply)
     val pExprsSB    = sexprParsers("[", ']', SSquareList.apply)
@@ -56,7 +56,7 @@ object Tokenizer {
     val pMapLiteral = sexprParsers("%{", '}', SMapLiteral.apply)
     P.oneOf(
       pString :: pExprs ::: pExprsSB ::: pExprsCB ::: pMapLiteral ::: pIdentifier :: Nil
-    )
+    ).surroundedBy(whitespaces0)
   }
 }
 
