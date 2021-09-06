@@ -6,6 +6,9 @@ import cats.implicits.*
 import scala.runtime.stdLibPatches.language.experimental.namedTypeArguments
 import cats.Eval
 import cats.implicits.*
+import ValueType.*
+import Type.*
+import TMapping.Required
 
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -14,7 +17,6 @@ object Transformer {
   def toAst(expr: SExp): Either[String, Expression] = {
     expr match {
       case SId(it) =>
-        // TODO parse literals like numbers, etc
         parseId(it)
       case SString(it) => Right(ELiteral(LString(it)))
       case SList(xs)   => sexp(xs)
@@ -167,10 +169,63 @@ object Transformer {
         )
     }
 
+  def parseIdType(str: String) = {
+    str match {
+      case str if str.startsWith(":") =>
+        Right(TValue(VTAtom(str.substring(1))))
+      case "()"  => Right(TValue(VTUnit))
+      case "nil" => Right(TValue(VTNil))
+      case _ =>
+        List(
+          str.toIntOption.map(it => TValue(VTInt(it))),
+          str.toBooleanOption.map(it => TValue(VTBool(it))),
+          str.toFloatOption.map(it => TValue(VTFloat(it)))
+        ).find(_.isDefined)
+          .flatten
+          .fold(Right(TVariable((str))))(Right(_))
+    }
+  }
+
   def parseType(sexp: SExp): Either[String, Type] = sexp match {
     // parsing value types is a big deal
-    case SId(value) => ???
-    case _          => ???
+    case SId(value)     => parseIdType(value)
+    case SString(value) => Right(TValue(VTString(value)))
+    case SList(elements) =>
+      elements match {
+        case SId("|") :: sum1 :: sum2 :: sums =>
+          for {
+            sum1T <- parseType(sum1)
+            sum2T <- parseType(sum2)
+            sumsT <- sums.map(parseType).sequence
+          } yield sumsT.foldLeft(TSum(sum1T, sum2T)) { case (agg, x) =>
+            TSum(x, agg)
+          }
+        case Nil => Right(TValue(VTUnit))
+        case SId("fn") :: SSquareList(args) :: returnType :: Nil => {
+          for {
+            retT  <- parseType(returnType)
+            argsT <- args.map(parseType).sequence
+          } yield TFunction(argsT, retT)
+        }
+        case x :: xs =>
+          for {
+            t   <- parseType(x)
+            xsT <- xs.map(parseType).sequence
+          } yield TTypeApp(t, xsT)
+      }
+    case SSquareList(elements) =>
+      elements match {
+        case x :: Nil => parseType(x).map(TList(_))
+        case Nil      => Right(TList(TNothing))
+        case _        => Left("Structure of a List type : [] | [TypeName]")
+      }
+    case SCurlyList(elements) => elements.map(parseType).sequence.map(TTuple(_))
+    case SMapLiteral(elements) =>
+      elements
+        .map(parseType)
+        .sequence
+        .flatMap(paired)
+        .map(pairs => TMap(pairs.map(Required.apply.tupled)))
   }
 
   // TODO should probably be specific to SExp to be able to include line info in the error
