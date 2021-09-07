@@ -187,7 +187,6 @@ object Transformer {
   }
 
   def parseType(sexp: SExp): Either[String, Type] = sexp match {
-    // parsing value types is a big deal
     case SId(value)     => parseIdType(value)
     case SString(value) => Right(TValue(VTString(value)))
     case SList(elements) =>
@@ -207,11 +206,11 @@ object Transformer {
             argsT <- args.map(parseType).sequence
           } yield TFunction(argsT, retT)
         }
-        case x :: xs =>
+        case _type :: typeArguments =>
           for {
-            t   <- parseType(x)
-            xsT <- xs.map(parseType).sequence
-          } yield TTypeApp(t, xsT)
+            typedType     <- parseType(_type)
+            typedTypeArgs <- typeArguments.map(parseType).sequence
+          } yield TTypeApp(typedType, typedTypeArgs)
       }
     case SSquareList(elements) =>
       elements match {
