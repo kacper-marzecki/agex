@@ -1,0 +1,46 @@
+* Housekeeping:
+ - [ ]  unify apis that take context as an argument - either all take it as a first arg, or the last
+ - [ ]  revisit instantiateL and instantiateR algo
+ - [ ]  maybe its possible to abstract the arity check
+ - [ ]  think about some better way to test errors than matching on their type like in the "fail on shadowed variable names" test 
+ - [ ]  remove 'case _ =>' matches
+* Functions:
+ - [ ]  optional parameters 
+* Types:
+  - [ ] maybe model them as just set of types ?
+  - [ ] Optionality in product types { optField ?: Int. reqField : String } 
+* Map 
+  - [ ] detect duplicate keys, eg. {someFunction 1 someFunction "asd"}, widen the type of the value
+  - think out: as fields are atom: atoms as functions over maps (as in clojure)
+  - [ ] special typing of map access:
+      map = %{
+          1 => "asd",
+          2 => 4
+      }
+      someInt: Int = 123
+      map[1]       // : "asd"
+      map[2]       // :  4
+      map[someInt] // : "asd" | 4 | nil
+      map["asd"]   // : nil
+      const res: Int = map[2]       
+
+* Modules: 
+  - think out module declaration, order of loading function headers, types etc
+  - external functions signature definition
+* Pattern matching:
+  - think out
+* Emitting Elixir:
+  - POC after finishing Modules and externs 
+* General: 
+  - NOT_IMPLEMENTED expression, akin to ??? in scala
+====================================
+test:testOnly *ListTest
+
+
+
+
+
+
+
+
+
