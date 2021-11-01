@@ -9,10 +9,41 @@ import cats.implicits.*
 import ValueType.*
 import Type.*
 import TMapping.Required
+import Statement.*
 
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
+
+  def toStatement(expr: SExp): Either[String, Statement] =
+    expr match {
+      // TODO match on statement type and check proper structure in other functions
+      case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
+        moduleMembers
+          .foldMapM(toStatement(_).map(List(_)))
+          .map(ModuleDefinition(moduleName, _))
+      case SList(
+            SId("defn") :: SId(functionName) :: typeAnnotation :: SCurlyList(
+              args
+            ) :: functionBody :: Nil
+          ) =>
+        for {
+          _type <- parseType(typeAnnotation)
+          body  <- toAst(functionBody)
+          argumentNames <- args.foldMapM {
+            case SId(name) => Right(List(name))
+            case other     => Left(s"Expected argument name, got: $other")
+          }
+        } yield FunctionDef(
+          functionName,
+          _type,
+          argumentNames,
+          body
+        )
+      case SList(SId("def") :: SId(attributeName) :: attributeBody :: Nil) =>
+        toAst(attributeBody).map(ModuleAttribute(attributeName, _))
+      case _ => Left(s"Unrecognized top-level construct: $expr")
+    }
 
   def toAst(expr: SExp): Either[String, Expression] = {
     expr match {

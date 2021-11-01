@@ -6,6 +6,9 @@
  - [ ]  remove 'case _ =>' matches
 * Functions:
  - [ ]  optional parameters 
+ - [ ]  distinguish between named functions and function references
+ - [ ]  multiple function heads under a single name 
+ - [ ]  patterns in arguments
 * Types:
   - [ ] maybe model them as just set of types ?
   - [ ] Optionality in product types { optField ?: Int. reqField : String } 

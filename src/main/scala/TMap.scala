@@ -6,6 +6,7 @@ import TMapping.Optional
 import TMapping.Required
 import Type.*
 import TypedExpression.TEMap
+
 def checksAgainstMap(
     context: Context,
     expr: EMap,
