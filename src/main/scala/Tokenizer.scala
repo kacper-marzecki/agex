@@ -58,6 +58,11 @@ object Tokenizer {
       pString :: pExprs ::: pExprsSB ::: pExprsCB ::: pMapLiteral ::: pIdentifier :: Nil
     ).surroundedBy(whitespaces0)
   }
+  def parseFileContent(str: String) =
+    pExpr.rep
+      .surroundedBy(whitespaces0)
+      .parseAll(str)
+      .map(_.toList)
 }
 
 object JsonStringUtil extends GenericStringUtil {

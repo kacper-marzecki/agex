@@ -25,6 +25,22 @@ object Statement {
       body: Expression
   )                                                          extends Statement
   case class ModuleAttribute(name: String, body: Expression) extends Statement
+  case class Alias(moduleName: String)                       extends Statement
+}
+
+sealed trait TypedStatement
+object TypedStatement {
+  case class ModuleDefinition(name: String, members: List[TypedStatement])
+      extends TypedStatement
+  case class FunctionDef(
+      name: String,
+      _type: Type,
+      args: List[String],
+      body: TypedExpression
+  ) extends TypedStatement
+  case class ModuleAttribute(name: String, body: TypedExpression)
+      extends TypedStatement
+  case class Alias(moduleName: String) extends TypedStatement
 }
 
 /** When adding a new expression
