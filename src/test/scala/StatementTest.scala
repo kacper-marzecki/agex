@@ -11,42 +11,43 @@ import ValueType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
-import CommonTestFunctions.{runSynth, parseAndSynth}
+import CommonTestFunctions.{runSynth, toZIO}
 import Statement.*
+
 object StatementTest extends DefaultRunnableSpec {
-  def spec = suite("StatementTest")(
-    testM("parsesModule") {
-      val module = """
-      (defmodule Kek 
+  val a = testM("parsesModule") {
+    val module = """
+      (defmodule Kek
         (alias Application.Math)
         (def amount 1)
-        (defn increment 
-          ([Integer] Integer) 
+        (defn increment
+          ([Integer] Integer)
           [a] (Math.plus a amount))
       )
       """
-      assertM(
-        Tokenizer.parseToSexprs(module).flatMap(Transformer.toStatement)
-      )(
-        equalTo(
-          ModuleDefinition(
-            "Kek",
-            List(
-              Alias("Application.Math"),
-              ModuleAttribute("amount", ELiteral(LInt(1))),
-              FunctionDef(
-                "increment",
-                TFunction(List(TVariable("Integer")), TVariable("Integer")),
-                List("a"),
-                EFunctionApplication(
-                  EVariable("Math.plus"),
-                  List(EVariable("a"), EVariable("amount"))
-                )
+    val x      = Compiler.fileToModule(module)
+    val ass = equalTo(
+      List(
+        ModuleDefinition(
+          "Kek",
+          List(
+            Alias("Application.Math"),
+            ModuleAttribute("amount", ELiteral(LInt(1))),
+            FunctionDef(
+              "increment",
+              TFunction(List(TVariable("Integer")), TVariable("Integer")),
+              List("a"),
+              EFunctionApplication(
+                EVariable("Math.plus"),
+                List(EVariable("a"), EVariable("amount"))
               )
             )
           )
         )
       )
-    }
-  )
+    )
+    // assertM(ZIO.succeed(1))(equalTo(1))
+    assertM(toZIO(x))(ass)
+  }
+  def spec = suite("StatementTest")(a)
 }

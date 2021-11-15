@@ -28,10 +28,6 @@ object Transformer {
   def toStatement(expr: SExp): Either[String, Statement] =
     expr match {
       // TODO match on statement type and check proper structure in other functions
-      case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
-        moduleMembers
-          .foldMapM(toStatement(_).map(List(_)))
-          .map(ModuleDefinition(moduleName, _))
       case SList(
             SId("defn") :: SId(functionName) :: SList(
               List(SSquareList(argTypes), returnType)

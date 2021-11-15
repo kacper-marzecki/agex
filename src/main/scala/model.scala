@@ -10,11 +10,10 @@ object Literal {
   case object LNil               extends Literal
   case object LUnit              extends Literal
 }
+case class ModuleDefinition(name: String, members: List[Statement])
 
 sealed trait Statement
 object Statement {
-  case class ModuleDefinition(name: String, members: List[Statement])
-      extends Statement
 
   /** (def a (fn [number] number) [a] (+ a 1))
     */
@@ -26,6 +25,7 @@ object Statement {
   )                                                          extends Statement
   case class ModuleAttribute(name: String, body: Expression) extends Statement
   case class Alias(moduleName: String)                       extends Statement
+  case class TypeDef(name: String, _type: Type)              extends Statement
 }
 
 sealed trait TypedStatement
