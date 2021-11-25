@@ -14,25 +14,23 @@ case class ModuleDependencies(
 )
 
 object Compiler {
-  val a = new Compiler(
+  val stubCompiler = new Compiler(
     _ =>
       ZIO.succeed(
         List("asd")
       ),
-    _ => ZIO.succeed("""
-  (defmodule Ecto.Changeset)
-  (defmodule Kek
-    (alias Ecto.Changeset)
-    (defn increment 
-          ([Integer] Integer) 
-          [a] (Math.plus a amount)))
-  (defmodule Math
-    (defn plus
-      ([Integer, Integer] Integer)
-      [a, b] (+ a b)))
-  """)
+    _ =>
+      ZIO(
+        scala.io.Source
+          .fromFile("test.rkt")
+          .getLines
+          .toList
+          .foldSmash("", "\n", "")
+      ).mapError(AppError.UnknownError(_))
   )
-  def fileToModule(fileContent: String): Eff[List[ModuleDefinition]] =
+  def fileToModule(
+      fileContent: String
+  ): Eff[List[Either[ModuleDefinition, ElixirModule]]] =
     for {
       // file can contain multiple modules
       sexps <- ZIO
@@ -41,7 +39,8 @@ object Compiler {
         .tapError(pPrint(_, "PARSER ERR"))
 
       modules <- ZIO
-        .fromEither(sexps.map(Transformer.toModule(_)).sequence)
+        .fromEither(sexps.map(Sexp.toModule(_)).sequence)
+        .tapError(pPrint(_, "ASD"))
         .mapError(AppError.AstTransformationError(_))
     } yield modules
 }
@@ -55,8 +54,15 @@ class Compiler(
     for {
       files   <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
       modules <- files.foldMapM(fileToModule)
-      dependenciesAndModules <- getModuleDependencies(modules)
-      existingModules = dependenciesAndModules.map(_.module.name).toSet
+      agexModules   = modules.collect { case Left(it) => it }
+      elixirModules = modules.collect { case Right(it) => it }
+      existingModules = agexModules.map(_.name).toSet ++ elixirModules
+        .map(_.name)
+        .toSet
+      dependenciesAndModules <- getModuleDependencies(
+        agexModules,
+        existingModules
+      )
 
       sortedModules <- ZIO
         .fromOption(
@@ -80,11 +86,12 @@ class Compiler(
       // raise on conflicting modules
 
     } yield ()
-  }
+  }.tapError(pPrint(_, "COMPILE ERROR"))
 
-  def getModuleDependencies(modules: List[ModuleDefinition]) = {
-    val existingModules = modules.map(_.name).toSet
-
+  def getModuleDependencies(
+      modules: List[ModuleDefinition],
+      existingModules: Set[String]
+  ) =
     ZIO.foreach(modules) { module =>
       val refs            = getModuleReferences(module)
       val nonExistingRefs = refs.filter(!existingModules.contains(_))
@@ -93,7 +100,6 @@ class Compiler(
       } else
         ZIO.fail(AppError.ModulesNotFound(nonExistingRefs))
     }
-  }
 
   def getModuleReferences(
       module: ModuleDefinition,

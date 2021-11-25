@@ -28,18 +28,20 @@ object StatementTest extends DefaultRunnableSpec {
     val x      = Compiler.fileToModule(module)
     val ass = equalTo(
       List(
-        ModuleDefinition(
-          "Kek",
-          List(
-            Alias("Application.Math"),
-            ModuleAttribute("amount", ELiteral(LInt(1))),
-            FunctionDef(
-              "increment",
-              TFunction(List(TVariable("Integer")), TVariable("Integer")),
-              List("a"),
-              EFunctionApplication(
-                EVariable("Math.plus"),
-                List(EVariable("a"), EVariable("amount"))
+        Left(
+          ModuleDefinition(
+            "Kek",
+            List(
+              Alias("Application.Math"),
+              ModuleAttribute("amount", ELiteral(LInt(1))),
+              FunctionDef(
+                "increment",
+                TFunction(List(TVariable("Integer")), TVariable("Integer")),
+                List("a"),
+                EFunctionApplication(
+                  EVariable("Math.plus"),
+                  List(EVariable("a"), EVariable("amount"))
+                )
               )
             )
           )
