@@ -10,6 +10,38 @@ object Literal {
   case object LNil               extends Literal
   case object LUnit              extends Literal
 }
+case class ModuleDefinition(name: String, members: List[Statement])
+
+sealed trait Statement
+object Statement {
+
+  /** (def a (fn [number] number) [a] (+ a 1))
+    */
+  case class FunctionDef(
+      name: String,
+      _type: Type,
+      args: List[String],
+      body: Expression
+  )                                                          extends Statement
+  case class ModuleAttribute(name: String, body: Expression) extends Statement
+  case class Alias(moduleName: String)                       extends Statement
+  case class TypeDef(name: String, _type: Type)              extends Statement
+}
+
+sealed trait TypedStatement
+object TypedStatement {
+  case class ModuleDefinition(name: String, members: List[TypedStatement])
+      extends TypedStatement
+  case class FunctionDef(
+      name: String,
+      _type: Type,
+      args: List[String],
+      body: TypedExpression
+  ) extends TypedStatement
+  case class ModuleAttribute(name: String, body: TypedExpression)
+      extends TypedStatement
+  case class Alias(moduleName: String) extends TypedStatement
+}
 
 /** When adding a new expression
   *   - update synthesis logic
@@ -166,7 +198,8 @@ sealed trait TypedExpression {
 object TypedExpression {
   case class TEVariable(name: String, _type: Type) extends TypedExpression
   case class TELiteral(it: Literal, _type: Type)   extends TypedExpression
-  case class TEAny(expression: TypedExpression, _type: Type = TAny) extends TypedExpression 
+  case class TEAny(expression: TypedExpression, _type: Type = TAny)
+      extends TypedExpression
   case class TELet(
       name: String,
       value: TypedExpression,

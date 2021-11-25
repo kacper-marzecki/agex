@@ -51,4 +51,7 @@ object CommonTestFunctions {
       synthed <- runSynth(expr)
     } yield (expr, synthed)
   }
+
+  def toZIO[A](eff: Eff[A]) =
+    eff.provideSomeLayer[zio.ZEnv](CompilerState.live)
 }

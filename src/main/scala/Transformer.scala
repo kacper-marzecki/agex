@@ -9,10 +9,53 @@ import cats.implicits.*
 import ValueType.*
 import Type.*
 import TMapping.Required
+import Statement.*
 
 object Transformer {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
+
+  def toModule(expr: SExp): Either[String, ModuleDefinition] = {
+    expr match {
+      case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
+        moduleMembers
+          .foldMapM(toStatement(_).map(List(_)))
+          .map(ModuleDefinition(moduleName, _))
+      case _ => Left(s"Expected module definition, got: $expr")
+    }
+  }
+
+  def toStatement(expr: SExp): Either[String, Statement] =
+    expr match {
+      // TODO match on statement type and check proper structure in other functions
+      case SList(
+            SId("defn") :: SId(functionName) :: SList(
+              List(SSquareList(argTypes), returnType)
+            ) :: SSquareList(
+              args
+            ) :: functionBody :: Nil
+          ) =>
+        for {
+          _type <- parseType(
+            SList(List(SId("fn"), SSquareList(argTypes), returnType))
+          )
+          body <- toAst(functionBody)
+          argumentNames <- args.foldMapM {
+            case SId(name) => Right(List(name))
+            case other     => Left(s"Expected argument name, got: $other")
+          }
+        } yield FunctionDef(
+          functionName,
+          _type,
+          argumentNames,
+          body
+        )
+      case SList(SId("def") :: SId(attributeName) :: attributeBody :: Nil) =>
+        toAst(attributeBody).map(ModuleAttribute(attributeName, _))
+      case SList(SId("alias") :: SId(moduleName) :: Nil) =>
+        Right(Alias(moduleName))
+      case _ => Left(s"Unrecognized top-level construct: $expr")
+    }
 
   def toAst(expr: SExp): Either[String, Expression] = {
     expr match {
