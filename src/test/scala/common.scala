@@ -41,7 +41,7 @@ object CommonTestFunctions {
   def stringToExpr(str: String) = {
     for {
       sexpr <- ZIO.fromEither(Tokenizer.pExpr.parseAll(str))
-      ast   <- ZIO.fromEither(Transformer.toAst(sexpr))
+      ast   <- ZIO.fromEither(Sexp.toAst(sexpr))
     } yield ast
   }
 

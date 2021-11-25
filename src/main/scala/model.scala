@@ -10,6 +10,14 @@ object Literal {
   case object LNil               extends Literal
   case object LUnit              extends Literal
 }
+
+case class ElixirModule(name: String, members: List[ElixirFunction])
+case class ElixirFunction(
+    name: String,
+    _type: Type,
+    targetFunction: String
+)
+
 case class ModuleDefinition(name: String, members: List[Statement])
 
 sealed trait Statement
