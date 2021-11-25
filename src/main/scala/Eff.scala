@@ -22,6 +22,9 @@ enum AppError extends RuntimeException {
   case UnknownError(throwable: Throwable)
   case ParserError(error: cats.parse.Parser.Error)
   case AstTransformationError(error: String)
+  // TODO add more info
+  case ModuleCircularDependency()
+  case ModulesNotFound(modules: List[String])
 }
 
 type Env = ZEnv & Has[CompilerState]

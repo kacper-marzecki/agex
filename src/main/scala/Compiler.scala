@@ -20,6 +20,7 @@ object Compiler {
         List("asd")
       ),
     _ => ZIO.succeed("""
+  (defmodule Ecto.Changeset)
   (defmodule Kek
     (alias Ecto.Changeset)
     (defn increment 
@@ -28,7 +29,7 @@ object Compiler {
   (defmodule Math
     (defn plus
       ([Integer, Integer] Integer)
-      [a, b] a))
+      [a, b] (+ a b)))
   """)
   )
   def fileToModule(fileContent: String): Eff[List[ModuleDefinition]] =
@@ -37,6 +38,7 @@ object Compiler {
       sexps <- ZIO
         .fromEither(Tokenizer.parseFileContent(fileContent))
         .mapError(AppError.ParserError(_))
+        .tapError(pPrint(_, "PARSER ERR"))
 
       modules <- ZIO
         .fromEither(sexps.map(Transformer.toModule(_)).sequence)
@@ -53,23 +55,44 @@ class Compiler(
     for {
       files   <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
       modules <- files.foldMapM(fileToModule)
-      dependenciesAndModules = modules
-        .map(module => (module, getModuleReferences(module)))
-        .map(ModuleDependencies.apply.tupled)
+      dependenciesAndModules <- getModuleDependencies(modules)
       existingModules = dependenciesAndModules.map(_.module.name).toSet
-      sortedModules = Graph(
-        dependenciesAndModules
-          .map(a => (a.module.name, a.dependencies.toSet))
-          .toMap
-      ).topologicalSort
-        .map(_.filter(existingModules.contains))
+
+      sortedModules <- ZIO
+        .fromOption(
+          Graph(
+            dependenciesAndModules
+              .map(a => (a.module.name, a.dependencies.toSet))
+              .toMap
+          ).topologicalSort
+        )
+        .mapError(_ => AppError.ModuleCircularDependency())
+        .map(_.filter(existingModules.contains).reverse)
       _ <- pPrint(sortedModules, "MODULES")
+
       _ <- pPrint(
         dependenciesAndModules.map(_.dependencies),
         "DEPENDENCIES AND MODULES"
       )
-      //  TODO NOW dependency graph between modules, deep-checking for references in AST
+
+      // List(List("Math", "Ecto.Changeset.Math", "Ecto.Changeset"), List())
+      // ^ remove non-existing modules from dependencies
+      // raise on conflicting modules
+
     } yield ()
+  }
+
+  def getModuleDependencies(modules: List[ModuleDefinition]) = {
+    val existingModules = modules.map(_.name).toSet
+
+    ZIO.foreach(modules) { module =>
+      val refs            = getModuleReferences(module)
+      val nonExistingRefs = refs.filter(!existingModules.contains(_))
+      if (nonExistingRefs.isEmpty) {
+        ZIO.succeed(ModuleDependencies(module, refs))
+      } else
+        ZIO.fail(AppError.ModulesNotFound(nonExistingRefs))
+    }
   }
 
   def getModuleReferences(
@@ -112,7 +135,8 @@ class Compiler(
   }
 
   private def withAliases(references: List[String], aliases: Set[String]) =
-    aliases.flatMap(alias => references.map(alias + "." + _))
+    // references ++ aliases.flatMap(alias => references.map(alias + "." + _))
+    references ++ aliases
 
   def getModuleReferences(expression: Expression): List[String] =
     expression match {
@@ -184,12 +208,13 @@ class Compiler(
   def getModuleReferences(it: Statement.FunctionDef): List[String] =
     getModuleReferences(it._type) ++ getModuleReferences(it.body)
 
-  def getModuleReference(string: String) =
-    if (string.split(".").length > 1)
+  def getModuleReference(string: String) = {
+    if (string.split('.').length > 1) {
       Some(
-        string.split(".").reverse.drop(1).reverse.toList.foldSmash("", ".", "")
+        string.split('.').reverse.drop(1).reverse.toList.foldSmash("", ".", "")
       )
-    else None
+    } else None
+  }
 
 }
 
@@ -229,6 +254,10 @@ case class Graph[A](adj: Map[A, Set[A]]) {
     (stateAfterSearch.tsOrder, stateAfterSearch.isCylic)
   }
 
+  // TODO return Either[Set[A], List[A]]
+  //                     ^          ^
+  //                     |          |
+  //                   cycle      result
   def topologicalSort: Option[List[A]] = dfs match {
     case (topologicalOrder, false) => Some(topologicalOrder)
     case _                         => None
