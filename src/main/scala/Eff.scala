@@ -25,6 +25,7 @@ enum AppError extends RuntimeException {
   // TODO add more info
   case ModuleCircularDependency()
   case ModulesNotFound(modules: List[String])
+  case MultipleModuleDefinition(modules: List[String])
 }
 
 type Env = ZEnv & Has[CompilerState]

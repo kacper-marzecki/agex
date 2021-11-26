@@ -10,6 +10,7 @@ import ValueType.*
 import Type.*
 import TMapping.Required
 import Statement.*
+import LiteralType.LTInt
 
 object Sexp {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -57,33 +58,25 @@ object Sexp {
     case functionApplication => parseFunctionApplication(functionApplication)
   }
 
-  def toElixirModule(expr: SExp): Either[String, ElixirModule] = {
-    expr match {
-      case SList(SId("defelixir") :: SId(moduleName) :: moduleMembers) =>
-        moduleMembers
-          .foldMapM(toElixirFunction(_).map(List(_)))
-          .map(ElixirModule(moduleName, _))
-      case _ => Left(s"Expected module definition, got: $expr")
-    }
-  }
-
   def toModule(
       expr: SExp
-  ): Either[String, Either[ModuleDefinition, ElixirModule]] = {
+  ): Either[String, AgexModule] = {
     expr match {
       case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
           .foldMapM(toStatement(_).map(List(_)))
-          .map(it => Left(ModuleDefinition(moduleName, it)))
+          .map(it => ModuleDefinition(moduleName, it))
       case SList(SId("defelixir") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
-          .foldMapM(toElixirFunction(_).map(List(_)))
-          .map(it => Right(ElixirModule(moduleName, it)))
+          .foldMapM(toElixirModuleStatement(_).map(List(_)))
+          .map(it => ElixirModule(moduleName, it))
       case _ => Left(s"Expected module definition, got: $expr")
     }
   }
 
-  def toElixirFunction(expr: SExp): Either[String, ElixirFunction] =
+  def toElixirModuleStatement(
+      expr: SExp
+  ): Either[String, ElixirModuleStatement] =
     expr match {
       case SList(
             SId("def") :: SId(functionName) :: SList(
@@ -99,6 +92,10 @@ object Sexp {
           _type,
           elixirFunctionName
         )
+      case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
+        parseType(_type).map(ElixirTypeDef(name, _))
+      case SList(SId("alias") :: SId(moduleName) :: Nil) =>
+        Right(ElixirModuleAlias(moduleName))
       case _ => Left(s"Unrecognized Elixir interface module construct: $expr")
     }
 
@@ -120,6 +117,7 @@ object Sexp {
 
   def parseIdType(str: String) = {
     str match {
+      case "integer" => Right(TLiteral(LTInt))
       case str if str.startsWith(":") =>
         Right(TValue(VTAtom(str.substring(1))))
       case "()"  => Right(TValue(VTUnit))
@@ -162,6 +160,8 @@ object Sexp {
         )
       case SList(SId("def") :: SId(attributeName) :: attributeBody :: Nil) =>
         toAst(attributeBody).map(ModuleAttribute(attributeName, _))
+      case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
+        parseType(_type).map(TypeDef(name, _))
       case SList(SId("alias") :: SId(moduleName) :: Nil) =>
         Right(Alias(moduleName))
       case _ => Left(s"Unrecognized top-level construct: $expr")

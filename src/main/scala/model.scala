@@ -11,14 +11,21 @@ object Literal {
   case object LUnit              extends Literal
 }
 
-case class ElixirModule(name: String, members: List[ElixirFunction])
+sealed trait AgexModule { def name: String }
+sealed trait ElixirModuleStatement
+case class ElixirModule(name: String, members: List[ElixirModuleStatement])
+    extends AgexModule
 case class ElixirFunction(
     name: String,
     _type: Type,
     targetFunction: String
-)
+)                                                extends ElixirModuleStatement
+case class ElixirModuleAlias(moduleName: String) extends ElixirModuleStatement
+case class ElixirTypeDef(name: String, _type: Type)
+    extends ElixirModuleStatement
 
 case class ModuleDefinition(name: String, members: List[Statement])
+    extends AgexModule
 
 sealed trait Statement
 object Statement {
