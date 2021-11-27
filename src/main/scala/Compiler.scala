@@ -5,6 +5,7 @@ import Statement.*
 import cats.implicits.*
 import zio.interop.catz.*
 import Expression.*
+import TypedExpression.*
 import Type.*
 import scala.annotation.meta.field
 
@@ -84,13 +85,7 @@ class Compiler(
             modules.find(_.name == moduleName).get
           )
       }
-      // a = ZIO.foreach(modules) { module =>
-      //   module
-      // }
-      // a = ZIO.foreach(sortedModules) { m =>
-      //   val elixirModule = elixirModules.find(_.name).orElse()
 
-      // }
       _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
       _ <- pPrint(sortedModules, "MODULES")
 
@@ -101,6 +96,48 @@ class Compiler(
 
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
+
+  private case class State()
+  def compile(
+      sortedModules: List[String],
+      modules: List[AgexModule],
+      globalContext: Context
+  ) = {
+    ZIO
+      .foldLeft(sortedModules)(State()) { (s, moduleName) =>
+        val module = modules.find(_.name == moduleName).get
+        val a = module match {
+          case it: ModuleDefinition =>
+            val typedStatements = Module
+              .addToLocalContext(globalContext, it)
+              .flatMap { c =>
+                it.members.map {
+                  case statement: Statement.ModuleAttribute => ???
+                  case statement: Statement.TypeDef         => ???
+                  case statement: Statement.FunctionDef =>
+                    synth(
+                      EAnnotation(
+                        EFunction(statement.args, statement.body),
+                        statement._type
+                      ),
+                      c
+                    ).map {
+                      case (
+                            gamma,
+                            TEAnnotation(TEFunction(_, typed, _), _, _)
+                          ) =>
+                        typed
+                      case _ => ???
+                    }
+                }.sequence
+              }
+
+          case it: ElixirModule => ???
+        }
+        ZIO.succeed(s)
+      }
+      .as(1)
+  }
 
   def validateUniqueModules(modules: List[AgexModule]) = {
     val duplicateModules = modules
