@@ -93,50 +93,75 @@ class Compiler(
         dependenciesAndModules,
         "DEPENDENCIES AND MODULES"
       )
+      typedModules <- compile(sortedModules, modules, defaultContext)
+      _            <- pPrint(typedModules, "TYPED MODULES")
 
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
-  private case class State()
+  case class State(modules: List[TypedModule])
   def compile(
       sortedModules: List[String],
       modules: List[AgexModule],
       globalContext: Context
   ) = {
     ZIO
-      .foldLeft(sortedModules)(State()) { (s, moduleName) =>
+      .foldLeft(sortedModules)(State(Nil)) { (s, moduleName) =>
         val module = modules.find(_.name == moduleName).get
-        val a = module match {
-          case it: ModuleDefinition =>
-            val typedStatements = Module
-              .addToLocalContext(globalContext, it)
-              .flatMap { c =>
-                it.members.map {
-                  case statement: Statement.ModuleAttribute => ???
-                  case statement: Statement.TypeDef         => ???
-                  case statement: Statement.FunctionDef =>
-                    synth(
-                      EAnnotation(
-                        EFunction(statement.args, statement.body),
-                        statement._type
-                      ),
-                      c
-                    ).map {
-                      case (
-                            gamma,
-                            TEAnnotation(TEFunction(_, typed, _), _, _)
-                          ) =>
-                        typed
-                      case _ => ???
+        for {
+          typedModule <- module match {
+            case it: ModuleDefinition =>
+              // Add aliased modules to the context as the alias
+              val aliasedModules = it.aliases.map(moduleName =>
+                modules.find(_.name == moduleName).get
+              )
+              for {
+                aliasedContext <- ZIO.foldLeft(aliasedModules)(globalContext)(
+                  Module.addToAliasedContext
+                )
+                _ <- pPrint(it, "modele to alias")
+                _ <- pPrint(aliasedContext, "ALIASED CONTEXT")
+                result <- Module
+                  .addToLocalContext(aliasedContext, it)
+                  .flatMap { c =>
+                    it.members.foldMapM {
+                      case statement: Statement.ModuleAttribute =>
+                        ZIO.succeed(List())
+                      case statement: Statement.TypeDef => ZIO.succeed(List())
+                      case statement: Statement.FunctionDef =>
+                        synth(
+                          EAnnotation(
+                            EFunction(statement.args, statement.body),
+                            statement._type
+                          ),
+                          c
+                        ).map {
+                          case (
+                                gamma,
+                                TEAnnotation(TEFunction(_, typed, _), _, _)
+                              ) =>
+                            List(
+                              TypedStatement
+                                .FunctionDef(
+                                  statement.name,
+                                  statement.args,
+                                  typed
+                                )
+                            )
+                          case _ => ???
+                        }
                     }
-                }.sequence
-              }
-
-          case it: ElixirModule => ???
-        }
-        ZIO.succeed(s)
+                  }
+                  .map(typedStatements =>
+                    TypedModule(it.name, it.aliases, typedStatements)
+                  )
+                  .asSome
+              } yield result
+            case it: ElixirModule => ZIO.none
+          }
+        } yield s.copy(modules = typedModule.toList ::: s.modules)
       }
-      .as(1)
+      .map(_.modules)
   }
 
   def validateUniqueModules(modules: List[AgexModule]) = {

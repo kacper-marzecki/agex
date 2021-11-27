@@ -56,7 +56,6 @@ sealed trait TypedStatement
 object TypedStatement {
   case class FunctionDef(
       name: String,
-      _type: Type,
       args: List[String],
       body: TypedExpression
   ) extends TypedStatement

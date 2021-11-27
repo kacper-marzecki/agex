@@ -11,6 +11,8 @@ import TMapping.Required
 import Statement.*
 
 object Module {
+  // TODO these names are awful
+
   def addToGlobalContext(
       context: Context,
       module: AgexModule
@@ -33,6 +35,19 @@ object Module {
         addToContext(context, module, _ => "")
     }
 
+  def addToAliasedContext(
+      context: Context,
+      module: AgexModule
+  ): Eff[Context] = {
+    val f = (module: AgexModule) => module.name.split('.').last
+    module match {
+      case module: ElixirModule =>
+        addToContext(context, module, f)
+      case module: ModuleDefinition =>
+        addToContext(context, module, f)
+    }
+  }
+
   def addToContext(
       context: Context,
       eModule: ElixirModule,
@@ -41,12 +56,12 @@ object Module {
     val vars = eModule.members.collect {
       case member: ElixirFunction =>
         ContextElement.CTypedVariable(
-          s"${eModule.name}.${member.name}",
+          s"${prefixFn(eModule)}${member.name}",
           member._type
         )
       case member: ElixirTypeDef =>
         ContextElement.CTypeDefinition(
-          s"${eModule.name}.${member.name}",
+          s"${prefixFn(eModule)}${member.name}",
           member._type
         )
     }
@@ -61,12 +76,12 @@ object Module {
     val vars = module.members.collect {
       case member: FunctionDef =>
         ContextElement.CTypedVariable(
-          s"${module.name}.${member.name}",
+          s"${prefixFn(module)}${member.name}",
           member._type
         )
       case member: TypeDef =>
         ContextElement.CTypeDefinition(
-          s"${module.name}.${member.name}",
+          s"${prefixFn(module)}${member.name}",
           member._type
         )
     }
