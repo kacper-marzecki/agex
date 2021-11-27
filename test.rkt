@@ -1,11 +1,10 @@
 
 
-(defelixir Ecto.Changeset
-  (deftype Result Integer)
-  (def cast ([Any attrs] Result) "Ecto.Changeset.cast" ))
-
+; (defelixir Ecto.Changeset
+;   (deftype Result integer)
+;   (def cast ([Any attrs] Result) "Ecto.Changeset.cast" ))
 (defmodule Kek
-  (alias Ecto.Changeset)  
+  ; (alias Ecto.Changeset)  
   (defn increment 
-    ([Integer] Integer) 
-    [a] (Math.plus a amount)))
+    ([integer] integer) 
+    [a] (Kernel.+ a 1)))

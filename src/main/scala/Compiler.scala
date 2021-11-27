@@ -77,8 +77,16 @@ class Compiler(
         )
         .mapError(_ => AppError.ModuleCircularDependency())
         .map(_.filter(existingModules.contains))
-      defaultContext <- DefaultContext.get
-
+      defaultContext <- ZIO.foldLeft(sortedModules)(Context()) {
+        (c, moduleName) =>
+          Module.addToGlobalContext(
+            c,
+            modules.find(_.name == moduleName).get
+          )
+      }
+      // a = ZIO.foreach(modules) { module =>
+      //   module
+      // }
       // a = ZIO.foreach(sortedModules) { m =>
       //   val elixirModule = elixirModules.find(_.name).orElse()
 
@@ -118,84 +126,58 @@ class Compiler(
         case it: ModuleDefinition => getModuleReferences(it)
 
       }
-      val nonExistingRefs = refs.filter(!existingModules.contains(_))
-      if (nonExistingRefs.isEmpty) {
-        ZIO.succeed(ModuleDependencies(module, refs))
-      } else
-        ZIO.fail(AppError.ModulesNotFound(nonExistingRefs))
+      ZIO
+        .foreach(refs) { possibleRefs =>
+          val hits = possibleRefs.filter(existingModules.contains(_))
+          hits match {
+            case List(hit) => ZIO.succeed(hit)
+            case Nil       => ZIO.fail(AppError.ModulesNotFound(possibleRefs))
+            case multiple =>
+              ZIO.fail(
+                AppError.AmbiguousModuleReference(possibleRefs, multiple)
+              )
+          }
+        }
+        .map(ModuleDependencies(module, _))
     }
 
   def getElixirModuleReferences(
       module: ElixirModule,
       existingAliases: Set[String] = Set()
-  ): List[String] = {
-    val (references, aliases) =
-      module.members.foldLeft((Set[String](), existingAliases)) {
-        case ((references, aliases), member) =>
-          member match {
-            case it: ElixirFunction =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it._type),
-                  aliases
-                ),
-                aliases
-              )
-            case it: ElixirModuleAlias =>
-              (
-                references,
-                aliases + it.moduleName ++ aliases.map(_ + "." + it.moduleName)
-              )
-            case it: ElixirTypeDef =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it._type),
-                  aliases
-                ),
-                aliases
-              )
-          }
+  ): List[List[String]] = {
+    val references =
+      module.members.flatMap { member =>
+        member match {
+          case it: ElixirFunction => getModuleReferences(it._type)
+          case it: ElixirTypeDef  => getModuleReferences(it._type)
+        }
       }
-    references.combine(aliases).toList
+    // match aliases with possible references from the aliased modules
+    // (alias Phoenix.Controller
+    //        Ecto.Changeset)
+    // (def ... (Controller.json)
+    // results in [[Phoenix.Controller, Controller]]
+    references.map(ref =>
+      ref ::
+        module.aliases
+          .flatMap(alias => fullModulePath(ref, alias).toList)
+    )
   }
 
-  def getModuleReferences(
-      module: ModuleDefinition,
-      existingAliases: Set[String] = Set()
-  ): List[String] = {
-    val (references, aliases) =
-      module.members.foldLeft((Set[String](), existingAliases)) {
-        case ((references, aliases), member) =>
-          member match {
-            case it: FunctionDef =>
-              (
-                references ++ withAliases(getModuleReferences(it), aliases),
-                aliases
-              )
-            case it: ModuleAttribute =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it.body),
-                  aliases
-                ),
-                aliases
-              )
-            case it: Alias =>
-              (
-                references,
-                aliases + it.moduleName ++ aliases.map(_ + "." + it.moduleName)
-              )
-            case it: TypeDef =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it._type),
-                  aliases
-                ),
-                aliases
-              )
-          }
+  def getModuleReferences(module: ModuleDefinition): List[List[String]] = {
+    val references =
+      module.members.flatMap { member =>
+        member match {
+          case it: FunctionDef     => getModuleReferences(it)
+          case it: ModuleAttribute => getModuleReferences(it.body)
+          case it: TypeDef         => getModuleReferences(it._type)
+        }
       }
-    references.combine(aliases).toList
+    references.map(ref =>
+      ref ::
+        module.aliases
+          .flatMap(alias => fullModulePath(ref, alias).toList)
+    )
   }
 
   private def withAliases(references: List[String], aliases: Set[String]) =
@@ -271,6 +253,19 @@ class Compiler(
     }
   def getModuleReferences(it: Statement.FunctionDef): List[String] =
     getModuleReferences(it._type) ++ getModuleReferences(it.body)
+
+  def fullModulePath(reference: String, alias: String) = {
+    val aliasParts = alias.split('.')
+    if (reference.startsWith(aliasParts.last)) {
+      Some(
+        aliasParts.reverse
+          .drop(1)
+          .reverse
+          .toList
+          .mkString(".") + "." + reference
+      )
+    } else None
+  }
 
   def getModuleReference(string: String) = {
     if (string.split('.').length > 1) {

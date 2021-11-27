@@ -62,17 +62,43 @@ object Sexp {
       expr: SExp
   ): Either[String, AgexModule] = {
     expr match {
+      case SList(
+            SId("defmodule") :: SId(moduleName) :: SList(
+              SId("alias") :: aliasList
+            ) :: moduleMembers
+          ) =>
+        getAliases(aliasList).flatMap(aliases =>
+          moduleMembers
+            .foldMapM(toStatement(_).map(List(_)))
+            .map(it => ModuleDefinition(moduleName, aliases, it))
+        )
       case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
           .foldMapM(toStatement(_).map(List(_)))
-          .map(it => ModuleDefinition(moduleName, it))
+          .map(it => ModuleDefinition(moduleName, List(), it))
+      case SList(
+            SId("defelixir") :: SId(moduleName) :: SList(
+              SId("alias") :: aliasList
+            ) :: moduleMembers
+          ) =>
+        getAliases(aliasList).flatMap(aliases =>
+          moduleMembers
+            .foldMapM(toElixirModuleStatement(_).map(List(_)))
+            .map(it => ElixirModule(moduleName, aliases, it))
+        )
       case SList(SId("defelixir") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
           .foldMapM(toElixirModuleStatement(_).map(List(_)))
-          .map(it => ElixirModule(moduleName, it))
+          .map(it => ElixirModule(moduleName, List(), it))
       case _ => Left(s"Expected module definition, got: $expr")
     }
   }
+
+  def getAliases(aliases: List[SExp]) =
+    aliases.foldMapM {
+      case SId(name) => Right(List(name))
+      case _         => Left("Only module names allowed in aliases ")
+    }
 
   def toElixirModuleStatement(
       expr: SExp
@@ -94,8 +120,6 @@ object Sexp {
         )
       case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
         parseType(_type).map(ElixirTypeDef(name, _))
-      case SList(SId("alias") :: SId(moduleName) :: Nil) =>
-        Right(ElixirModuleAlias(moduleName))
       case _ => Left(s"Unrecognized Elixir interface module construct: $expr")
     }
 
@@ -162,8 +186,6 @@ object Sexp {
         toAst(attributeBody).map(ModuleAttribute(attributeName, _))
       case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
         parseType(_type).map(TypeDef(name, _))
-      case SList(SId("alias") :: SId(moduleName) :: Nil) =>
-        Right(Alias(moduleName))
       case _ => Left(s"Unrecognized top-level construct: $expr")
     }
   def parseId(str: String) = {
