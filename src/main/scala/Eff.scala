@@ -2,6 +2,7 @@ import zio.*
 
 enum AppError extends RuntimeException {
   case TypeNotApplicableToLiteral(_type: Type, literal: Literal)
+  case TypeNotApplicableToExpression(_type: Type, expression: Expression)
   case ElementNotFound(context: Context, element: ContextElement)
   case AnnotationNotFound(context: Context, name: String)
   case TypeNotWellFormed(context: Context, _type: Type)

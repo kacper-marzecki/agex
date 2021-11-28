@@ -92,12 +92,31 @@ def checksAgainst(
         delta              <- theta.drop(typedVars)
       } yield (TEFunction(args, typedBody, _type), delta)
     }
-    case (expression, TSum(typeA, typeB)) => {
-      ZIO.firstSuccessOf(
-        checksAgainst(context, expression, typeA),
-        List(checksAgainst(context, expression, typeB))
-      )
+    case (EIf(condition, ifTrue, ifFalse), _type) => {
+      for {
+        (conditionTyped, gamma) <- checksAgainst(
+          context,
+          condition,
+          TLiteral(LTBool)
+        )
+        (ifTrueTyped, theta)  <- checksAgainst(gamma, ifTrue, _type)
+        (ifFalseTyped, delta) <- checksAgainst(theta, ifFalse, _type)
+      } yield (TEIf(conditionTyped, ifTrueTyped, ifFalseTyped, _type), delta)
     }
+    // case (expression, TSum(typeA, typeB)) => {
+    //   pPrint(expression, "EXPRESSION TO CHECK") *>
+    //     pPrint(typeA, "SUM A TYPE TO CHECK AGAINST") *>
+    //     pPrint(typeB, "SUM B TYPE TO CHECK AGAINST") *>
+    //     ZIO
+    //       .firstSuccessOf(
+    //         checksAgainst(context, expression, typeA),
+    //         List(checksAgainst(context, expression, typeB))
+    //       )
+    //       .map { case (t, c) => (t.modify(_._type).setTo(_type), c) }
+    //       .mapError(_ =>
+    //         AppError.TypeNotApplicableToExpression(_type, expression)
+    //       )
+    // }
     case (expression, TAny) =>
       for {
         (expr, gamma) <- synthesizesTo(context, expression)
@@ -180,17 +199,7 @@ def checksAgainst(
     }
     case (_, TTypeRef(name)) =>
       context.getTypeDefinition(name).flatMap(checksAgainst(context, expr, _))
-    case (EIf(condition, ifTrue, ifFalse), _type) => {
-      for {
-        (conditionTyped, gamma) <- checksAgainst(
-          context,
-          ifTrue,
-          TLiteral(LTBool)
-        )
-        (ifTrueTyped, theta)  <- checksAgainst(gamma, ifTrue, _type)
-        (ifFalseTyped, delta) <- checksAgainst(theta, ifFalse, _type)
-      } yield (TEIf(conditionTyped, ifTrueTyped, ifFalseTyped, _type), delta)
-    }
+
     //DeclSub
     case _ => {
       for {
@@ -387,8 +396,15 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         // firstly, the same subtyping logic as in functions apply
         ???
       }
-      case (TSum(a1, b1), TSum(a2, b2)) => {
-        ???
+      case (TSum(a, b), sum: TSum) => {
+        subtype(context, a, sum).flatMap(subtype(_, b, sum))
+      }
+      case (t, TSum(x, y)) => {
+        findM(
+          List(x, y),
+          subtype(context, t, _),
+          AppError.CannotSubtype(context, t, b)
+        )
       }
       case (TSum(x, y), other) => {
         findM(
@@ -767,6 +783,7 @@ def synth(
     context: Context = Context()
 ): Eff[(Context, TypedExpression)] = {
   for {
+    _                                <- pPrint(expr, "EXPR TO SYNTH")
     (typedExpression, resultContext) <- synthesizesTo(context, expr)
     resultType <- applyContext(typedExpression._type, resultContext)
     result = typedExpression.modify(_._type).setTo(resultType)

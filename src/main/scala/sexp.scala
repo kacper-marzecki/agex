@@ -10,7 +10,7 @@ import ValueType.*
 import Type.*
 import TMapping.Required
 import Statement.*
-import LiteralType.LTInt
+import LiteralType.*
 
 object Sexp {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -142,6 +142,11 @@ object Sexp {
   def parseIdType(str: String) = {
     str match {
       case "integer" => Right(TLiteral(LTInt))
+      case "float"   => Right(TLiteral(LTFloat))
+      case "boolean" => Right(TLiteral(LTBool))
+      case "string"  => Right(TLiteral(LTString))
+      case "char"    => Right(TLiteral(LTChar))
+      case "any"     => Right(TAny)
       case str if str.startsWith(":") =>
         Right(TValue(VTAtom(str.substring(1))))
       case "()"  => Right(TValue(VTUnit))
