@@ -38,6 +38,12 @@ object CommonTestFunctions {
       .provideSomeLayer[zio.ZEnv](CompilerState.live)
       .tapError(if (debug) prettyPrint(_, "synthError") else _ => ZIO.unit)
 
+  def getCompilationErrorCause(err: AppError): AppError =
+    err match {
+      case AppError.CompilationError(_, e) => getCompilationErrorCause(e)
+      case e                               => e
+    }
+
   def stringToExpr(str: String) = {
     for {
       sexpr <- ZIO.fromEither(Tokenizer.pExpr.parseAll(str))

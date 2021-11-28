@@ -33,9 +33,12 @@ object IfTest extends DefaultRunnableSpec {
       val exp = EIf(ELiteral(LInt(1)), ELiteral(LInt(2)), ELiteral(LInt(4)))
       assertM(runSynth(exp).flip)(
         equalTo(
-          AppError.TypeNotApplicableToLiteral(
-            TLiteral(LTBool),
-            LInt(1)
+          AppError.CompilationError(
+            exp,
+            AppError.TypeNotApplicableToLiteral(
+              TLiteral(LTBool),
+              LInt(1)
+            )
           )
         )
       )

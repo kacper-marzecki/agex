@@ -101,9 +101,12 @@ object TupleTest extends DefaultRunnableSpec {
       )
       assertM(runSynth(exp).flip)(
         equalTo(
-          AppError.TupleSizesDontMatch(
-            TTuple(List(TValue(VTInt(1)), TValue(VTInt(1)))),
-            TTuple(List(TLiteral(LTInt)))
+          AppError.CompilationError(
+            exp,
+            AppError.TupleSizesDontMatch(
+              TTuple(List(TValue(VTInt(1)), TValue(VTInt(1)))),
+              TTuple(List(TLiteral(LTInt)))
+            )
           )
         )
       )
