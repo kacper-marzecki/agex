@@ -61,7 +61,11 @@ object Tokenizer {
   def parseFileContent(str: String) =
     pExpr.rep
       .surroundedBy(whitespaces0)
-      .parseAll(str)
+      .parseAll(
+        str.lines
+          .filter(!_.trim.startsWith(";"))
+          .reduce("", (a, b) => s"$a\n$b")
+      )
       .map(_.toList)
 }
 

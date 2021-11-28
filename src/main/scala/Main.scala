@@ -760,7 +760,7 @@ def synthesizesTo(
       )
     }
   }
-}
+}.mapError(e => AppError.CompilationError(expr, e))
 
 def synth(
     expr: Expression,

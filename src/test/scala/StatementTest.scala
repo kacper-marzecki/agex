@@ -31,8 +31,8 @@ object StatementTest extends DefaultRunnableSpec {
         Left(
           ModuleDefinition(
             "Kek",
+            List("Application.Math"),
             List(
-              Alias("Application.Math"),
               ModuleAttribute("amount", ELiteral(LInt(1))),
               FunctionDef(
                 "increment",

@@ -1,0 +1,6 @@
+(defelixir Kernel.Math
+  (deftype AdditionResult integer))
+
+(defelixir Kernel 
+  (alias Kernel.Math)
+  (def + ([integer integer] Math.AdditionResult) "Kernel.+" ))

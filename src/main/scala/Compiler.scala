@@ -5,11 +5,12 @@ import Statement.*
 import cats.implicits.*
 import zio.interop.catz.*
 import Expression.*
+import TypedExpression.*
 import Type.*
 import scala.annotation.meta.field
 
 case class ModuleDependencies(
-    module: ModuleDefinition,
+    module: AgexModule,
     dependencies: List[String]
 )
 
@@ -30,7 +31,7 @@ object Compiler {
   )
   def fileToModule(
       fileContent: String
-  ): Eff[List[Either[ModuleDefinition, ElixirModule]]] =
+  ): Eff[List[AgexModule]] =
     for {
       // file can contain multiple modules
       sexps <- ZIO
@@ -50,94 +51,207 @@ class Compiler(
     getFile: (path: String) => Eff[String]
 ) {
   import Compiler.*
+  val loadAgexCoreFiles = loadFilesInDirectory("agex")
   def compile(filePath: String): Eff[Unit] = {
     for {
-      files   <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
-      modules <- files.foldMapM(fileToModule)
-      agexModules   = modules.collect { case Left(it) => it }
-      elixirModules = modules.collect { case Right(it) => it }
-      existingModules = agexModules.map(_.name).toSet ++ elixirModules
-        .map(_.name)
-        .toSet
-      dependenciesAndModules <- getModuleDependencies(
-        agexModules,
-        existingModules
-      )
-
+      files         <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
+      agesCoreFiles <- loadAgexCoreFiles
+      modules       <- (files ++ agesCoreFiles).foldMapM(fileToModule)
+      _             <- validateUniqueModules(modules)
+      existingModules = modules.map(_.name).toSet
+      dependenciesAndModules <- getModuleDependencies(modules, existingModules)
+      moduleToModulesDependingOnIt = dependenciesAndModules
+        .flatMap(_.dependencies)
+        .map { it =>
+          (
+            it,
+            dependenciesAndModules
+              .filter(_.dependencies.contains(it))
+              .map(_.module.name)
+              .toSet
+          )
+        }
+        .toMap
       sortedModules <- ZIO
         .fromOption(
-          Graph(
-            dependenciesAndModules
-              .map(a => (a.module.name, a.dependencies.toSet))
-              .toMap
-          ).topologicalSort
+          Graph(moduleToModulesDependingOnIt).topologicalSort
         )
         .mapError(_ => AppError.ModuleCircularDependency())
-        .map(_.filter(existingModules.contains).reverse)
+        .map(_.filter(existingModules.contains))
+      defaultContext <- ZIO.foldLeft(sortedModules)(Context()) {
+        (c, moduleName) =>
+          Module.addToGlobalContext(
+            c,
+            modules.find(_.name == moduleName).get
+          )
+      }
+
+      _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
       _ <- pPrint(sortedModules, "MODULES")
 
       _ <- pPrint(
-        dependenciesAndModules.map(_.dependencies),
+        dependenciesAndModules,
         "DEPENDENCIES AND MODULES"
       )
-
-      // List(List("Math", "Ecto.Changeset.Math", "Ecto.Changeset"), List())
-      // ^ remove non-existing modules from dependencies
-      // raise on conflicting modules
+      typedModules <- compile(sortedModules, modules, defaultContext)
+      _            <- pPrint(typedModules, "TYPED MODULES")
 
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
+  case class State(modules: List[TypedModule], context: Context)
+  def compile(
+      sortedModules: List[String],
+      modules: List[AgexModule],
+      globalContext: Context
+  ) = {
+    ZIO
+      .foldLeft(sortedModules)(State(Nil, globalContext)) { (s, moduleName) =>
+        val module = modules.find(_.name == moduleName).get
+        for {
+          (typedModule, ctx) <- module match {
+            case it: ModuleDefinition =>
+              // Add aliased modules to the context as the alias
+              val aliasedModules = it.aliases.map(moduleName =>
+                modules.find(_.name == moduleName).get
+              )
+              for {
+                aliasedContext <- ZIO.foldLeft(aliasedModules)(s.context)(
+                  Module.addToAliasedContext
+                )
+                _ <- pPrint(it, "modele to alias")
+                _ <- pPrint(aliasedContext, "ALIASED CONTEXT")
+                result <- Module
+                  .addToLocalContext(aliasedContext, it)
+                  .flatMap { c =>
+                    it.members.foldMapM {
+                      case statement: Statement.ModuleAttribute =>
+                        ZIO.succeed(List())
+                      case statement: Statement.TypeDef => ZIO.succeed(List())
+                      case statement: Statement.FunctionDef =>
+                        synth(
+                          EAnnotation(
+                            EFunction(statement.args, statement.body),
+                            statement._type
+                          ),
+                          c
+                        ).map {
+                          case (
+                                gamma,
+                                TEAnnotation(TEFunction(_, typed, _), _, _)
+                              ) =>
+                            List(
+                              TypedStatement
+                                .FunctionDef(
+                                  statement.name,
+                                  statement.args,
+                                  typed
+                                )
+                            )
+                          case _ => ???
+                        }
+                    }
+                  }
+                  .map(typedStatements =>
+                    TypedModule(it.name, it.aliases, typedStatements)
+                  )
+                  .asSome
+                  .tupleRight(aliasedContext)
+              } yield result
+            case it: ElixirModule =>
+              val aliasedModules = it.aliases.map(moduleName =>
+                modules.find(_.name == moduleName).get
+              )
+              for {
+                aliasedContext <- ZIO.foldLeft(aliasedModules)(globalContext)(
+                  Module.addToAliasedContext
+                )
+              } yield (None, aliasedContext)
+          }
+        } yield s.copy(
+          context = ctx,
+          modules = typedModule.toList ::: s.modules
+        )
+      }
+      .map(_.modules)
+  }
+
+  def validateUniqueModules(modules: List[AgexModule]) = {
+    val duplicateModules = modules
+      .groupBy(_.name)
+      .collect { case (moduleName, a :: b :: rest) =>
+        moduleName
+      }
+      .toList
+    if (duplicateModules.nonEmpty) {
+      ZIO.fail(AppError.MultipleModuleDefinition(duplicateModules))
+    } else {
+      ZIO.unit
+    }
+  }
+
   def getModuleDependencies(
-      modules: List[ModuleDefinition],
+      modules: List[AgexModule],
       existingModules: Set[String]
   ) =
     ZIO.foreach(modules) { module =>
-      val refs            = getModuleReferences(module)
-      val nonExistingRefs = refs.filter(!existingModules.contains(_))
-      if (nonExistingRefs.isEmpty) {
-        ZIO.succeed(ModuleDependencies(module, refs))
-      } else
-        ZIO.fail(AppError.ModulesNotFound(nonExistingRefs))
-    }
+      val refs = module match {
+        case it: ElixirModule     => getElixirModuleReferences(it)
+        case it: ModuleDefinition => getModuleReferences(it)
 
-  def getModuleReferences(
-      module: ModuleDefinition,
-      existingAliases: Set[String] = Set()
-  ): List[String] = {
-    val (references, aliases) =
-      module.members.foldLeft((Set[String](), existingAliases)) {
-        case ((references, aliases), member) =>
-          member match {
-            case it: FunctionDef =>
-              (
-                references ++ withAliases(getModuleReferences(it), aliases),
-                aliases
-              )
-            case it: ModuleAttribute =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it.body),
-                  aliases
-                ),
-                aliases
-              )
-            case it: Alias =>
-              (
-                references,
-                aliases + it.moduleName ++ aliases.map(_ + "." + it.moduleName)
-              )
-            case it: TypeDef =>
-              (
-                references ++ withAliases(
-                  getModuleReferences(it._type),
-                  aliases
-                ),
-                aliases
+      }
+      ZIO
+        .foreach(refs) { possibleRefs =>
+          val hits = possibleRefs.filter(existingModules.contains(_))
+          hits match {
+            case List(hit) => ZIO.succeed(hit)
+            case Nil       => ZIO.fail(AppError.ModulesNotFound(possibleRefs))
+            case multiple =>
+              ZIO.fail(
+                AppError.AmbiguousModuleReference(possibleRefs, multiple)
               )
           }
+        }
+        .map(ModuleDependencies(module, _))
+    }
+
+  def getElixirModuleReferences(
+      module: ElixirModule,
+      existingAliases: Set[String] = Set()
+  ): List[List[String]] = {
+    val references =
+      module.members.flatMap { member =>
+        member match {
+          case it: ElixirFunction => getModuleReferences(it._type)
+          case it: ElixirTypeDef  => getModuleReferences(it._type)
+        }
       }
-    references.combine(aliases).toList
+    // match aliases with possible references from the aliased modules
+    // (alias Phoenix.Controller
+    //        Ecto.Changeset)
+    // (def ... (Controller.json)
+    // results in [[Phoenix.Controller, Controller]]
+    references.map(ref =>
+      ref ::
+        module.aliases
+          .flatMap(alias => fullModulePath(ref, alias).toList)
+    )
+  }
+
+  def getModuleReferences(module: ModuleDefinition): List[List[String]] = {
+    val references =
+      module.members.flatMap { member =>
+        member match {
+          case it: FunctionDef     => getModuleReferences(it)
+          case it: ModuleAttribute => getModuleReferences(it.body)
+          case it: TypeDef         => getModuleReferences(it._type)
+        }
+      }
+    references.map(ref =>
+      ref ::
+        module.aliases
+          .flatMap(alias => fullModulePath(ref, alias).toList)
+    )
   }
 
   private def withAliases(references: List[String], aliases: Set[String]) =
@@ -213,6 +327,19 @@ class Compiler(
     }
   def getModuleReferences(it: Statement.FunctionDef): List[String] =
     getModuleReferences(it._type) ++ getModuleReferences(it.body)
+
+  def fullModulePath(reference: String, alias: String) = {
+    val aliasParts = alias.split('.')
+    if (reference.startsWith(aliasParts.last)) {
+      Some(
+        aliasParts.reverse
+          .drop(1)
+          .reverse
+          .toList
+          .mkString(".") + "." + reference
+      )
+    } else None
+  }
 
   def getModuleReference(string: String) = {
     if (string.split('.').length > 1) {

@@ -11,14 +11,26 @@ object Literal {
   case object LUnit              extends Literal
 }
 
-case class ElixirModule(name: String, members: List[ElixirFunction])
+sealed trait AgexModule { def name: String }
+sealed trait ElixirModuleStatement
+case class ElixirModule(
+    name: String,
+    aliases: List[String],
+    members: List[ElixirModuleStatement]
+) extends AgexModule
 case class ElixirFunction(
     name: String,
     _type: Type,
     targetFunction: String
-)
+) extends ElixirModuleStatement
+case class ElixirTypeDef(name: String, _type: Type)
+    extends ElixirModuleStatement
 
-case class ModuleDefinition(name: String, members: List[Statement])
+case class ModuleDefinition(
+    name: String,
+    aliases: List[String],
+    members: List[Statement]
+) extends AgexModule
 
 sealed trait Statement
 object Statement {
@@ -32,23 +44,23 @@ object Statement {
       body: Expression
   )                                                          extends Statement
   case class ModuleAttribute(name: String, body: Expression) extends Statement
-  case class Alias(moduleName: String)                       extends Statement
   case class TypeDef(name: String, _type: Type)              extends Statement
 }
 
+case class TypedModule(
+    name: String,
+    aliases: List[String],
+    statements: List[TypedStatement]
+)
 sealed trait TypedStatement
 object TypedStatement {
-  case class ModuleDefinition(name: String, members: List[TypedStatement])
-      extends TypedStatement
   case class FunctionDef(
       name: String,
-      _type: Type,
       args: List[String],
       body: TypedExpression
   ) extends TypedStatement
   case class ModuleAttribute(name: String, body: TypedExpression)
       extends TypedStatement
-  case class Alias(moduleName: String) extends TypedStatement
 }
 
 /** When adding a new expression

@@ -10,6 +10,7 @@ import ValueType.*
 import Type.*
 import TMapping.Required
 import Statement.*
+import LiteralType.LTInt
 
 object Sexp {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -57,33 +58,51 @@ object Sexp {
     case functionApplication => parseFunctionApplication(functionApplication)
   }
 
-  def toElixirModule(expr: SExp): Either[String, ElixirModule] = {
-    expr match {
-      case SList(SId("defelixir") :: SId(moduleName) :: moduleMembers) =>
-        moduleMembers
-          .foldMapM(toElixirFunction(_).map(List(_)))
-          .map(ElixirModule(moduleName, _))
-      case _ => Left(s"Expected module definition, got: $expr")
-    }
-  }
-
   def toModule(
       expr: SExp
-  ): Either[String, Either[ModuleDefinition, ElixirModule]] = {
+  ): Either[String, AgexModule] = {
     expr match {
+      case SList(
+            SId("defmodule") :: SId(moduleName) :: SList(
+              SId("alias") :: aliasList
+            ) :: moduleMembers
+          ) =>
+        getAliases(aliasList).flatMap(aliases =>
+          moduleMembers
+            .foldMapM(toStatement(_).map(List(_)))
+            .map(it => ModuleDefinition(moduleName, aliases, it))
+        )
       case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
           .foldMapM(toStatement(_).map(List(_)))
-          .map(it => Left(ModuleDefinition(moduleName, it)))
+          .map(it => ModuleDefinition(moduleName, List(), it))
+      case SList(
+            SId("defelixir") :: SId(moduleName) :: SList(
+              SId("alias") :: aliasList
+            ) :: moduleMembers
+          ) =>
+        getAliases(aliasList).flatMap(aliases =>
+          moduleMembers
+            .foldMapM(toElixirModuleStatement(_).map(List(_)))
+            .map(it => ElixirModule(moduleName, aliases, it))
+        )
       case SList(SId("defelixir") :: SId(moduleName) :: moduleMembers) =>
         moduleMembers
-          .foldMapM(toElixirFunction(_).map(List(_)))
-          .map(it => Right(ElixirModule(moduleName, it)))
+          .foldMapM(toElixirModuleStatement(_).map(List(_)))
+          .map(it => ElixirModule(moduleName, List(), it))
       case _ => Left(s"Expected module definition, got: $expr")
     }
   }
 
-  def toElixirFunction(expr: SExp): Either[String, ElixirFunction] =
+  def getAliases(aliases: List[SExp]) =
+    aliases.foldMapM {
+      case SId(name) => Right(List(name))
+      case _         => Left("Only module names allowed in aliases ")
+    }
+
+  def toElixirModuleStatement(
+      expr: SExp
+  ): Either[String, ElixirModuleStatement] =
     expr match {
       case SList(
             SId("def") :: SId(functionName) :: SList(
@@ -99,6 +118,8 @@ object Sexp {
           _type,
           elixirFunctionName
         )
+      case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
+        parseType(_type).map(ElixirTypeDef(name, _))
       case _ => Left(s"Unrecognized Elixir interface module construct: $expr")
     }
 
@@ -120,6 +141,7 @@ object Sexp {
 
   def parseIdType(str: String) = {
     str match {
+      case "integer" => Right(TLiteral(LTInt))
       case str if str.startsWith(":") =>
         Right(TValue(VTAtom(str.substring(1))))
       case "()"  => Right(TValue(VTUnit))
@@ -131,7 +153,7 @@ object Sexp {
           str.toFloatOption.map(it => TValue(VTFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(Right(TVariable((str))))(Right(_))
+          .fold(Right(TTypeRef((str))))(Right(_))
     }
   }
 
@@ -162,8 +184,8 @@ object Sexp {
         )
       case SList(SId("def") :: SId(attributeName) :: attributeBody :: Nil) =>
         toAst(attributeBody).map(ModuleAttribute(attributeName, _))
-      case SList(SId("alias") :: SId(moduleName) :: Nil) =>
-        Right(Alias(moduleName))
+      case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
+        parseType(_type).map(TypeDef(name, _))
       case _ => Left(s"Unrecognized top-level construct: $expr")
     }
   def parseId(str: String) = {
@@ -212,7 +234,7 @@ object Sexp {
 
   def parseLet(xs: List[SExp]) =
     xs match {
-      case SId(name) :: SSquareList(bindings) :: body :: Nil =>
+      case SSquareList(bindings) :: body :: Nil =>
         for {
           nameExpressionPairs_? <- bindings
             .sliding(2)
@@ -227,7 +249,10 @@ object Sexp {
         } yield nameExpressionPairs.toList.foldRight(bodyExpr) {
           case ((name, binding), acc) => ELet(name, binding, acc)
         }
-      case _ => Left("structure of a type annotation:  `(: type expression)`")
+      case _ =>
+        Left(
+          s"structure of a type annotation:  `(: type expression)`, found: ${xs}"
+        )
     }
 
   def parseLetBinding(xs: List[SExp]): Either[String, (String, Expression)] =

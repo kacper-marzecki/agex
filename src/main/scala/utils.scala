@@ -95,3 +95,28 @@ def split[A, B](xs: List[(A, B)]): (List[A], List[B]) =
       (a :: accA, b :: accB)
     }
   }
+
+def loadFile(fileName: String) =
+  ZIO(
+    scala.io.Source
+      .fromFile(fileName)
+      .getLines
+      .toList
+      .foldSmash("", "\n", "")
+  ).mapError(AppError.UnknownError(_))
+
+def loadFilesInDirectory(directory: String) = {
+  import java.io.File
+  def recursiveListFiles(f: File): Array[File] = {
+    val these = f.listFiles
+    these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
+  }
+  ZIO {
+    recursiveListFiles(new File(directory)).map { f =>
+      val source = scala.io.Source.fromFile(f)
+      val lines  = source.getLines.toList.foldSmash("", "\n", "")
+      source.close
+      lines
+    }.toList
+  }.mapError(AppError.UnknownError(_))
+}
