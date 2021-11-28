@@ -7,4 +7,5 @@
   ; (alias Ecto.Changeset)  
   (defn increment 
     ([integer] integer) 
-    [a] (Kernel.+ a 1)))
+    [a] (let [z 2]
+          (Kernel.+ a z))))

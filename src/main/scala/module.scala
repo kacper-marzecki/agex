@@ -39,13 +39,15 @@ object Module {
       context: Context,
       module: AgexModule
   ): Eff[Context] = {
-    val f = (module: AgexModule) => module.name.split('.').last
-    module match {
-      case module: ElixirModule =>
-        addToContext(context, module, f)
-      case module: ModuleDefinition =>
-        addToContext(context, module, f)
-    }
+    val f = (module: AgexModule) => module.name.split('.').last + "."
+    pPrint(module, "M") *>
+      pPrint(f(module), "A") *>
+      (module match {
+        case module: ElixirModule =>
+          addToContext(context, module, f)
+        case module: ModuleDefinition =>
+          addToContext(context, module, f)
+      })
   }
 
   def addToContext(

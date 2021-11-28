@@ -30,6 +30,7 @@ enum AppError extends RuntimeException {
       references: List[String],
       possibleModules: List[String]
   )
+  case CompilationError(expression: Expression, error: AppError)
 }
 
 type Env = ZEnv & Has[CompilerState]

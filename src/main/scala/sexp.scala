@@ -153,7 +153,7 @@ object Sexp {
           str.toFloatOption.map(it => TValue(VTFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(Right(TVariable((str))))(Right(_))
+          .fold(Right(TTypeRef((str))))(Right(_))
     }
   }
 
@@ -234,7 +234,7 @@ object Sexp {
 
   def parseLet(xs: List[SExp]) =
     xs match {
-      case SId(name) :: SSquareList(bindings) :: body :: Nil =>
+      case SSquareList(bindings) :: body :: Nil =>
         for {
           nameExpressionPairs_? <- bindings
             .sliding(2)
@@ -249,7 +249,10 @@ object Sexp {
         } yield nameExpressionPairs.toList.foldRight(bodyExpr) {
           case ((name, binding), acc) => ELet(name, binding, acc)
         }
-      case _ => Left("structure of a type annotation:  `(: type expression)`")
+      case _ =>
+        Left(
+          s"structure of a type annotation:  `(: type expression)`, found: ${xs}"
+        )
     }
 
   def parseLetBinding(xs: List[SExp]): Either[String, (String, Expression)] =

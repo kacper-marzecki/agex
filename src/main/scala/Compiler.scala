@@ -99,24 +99,24 @@ class Compiler(
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
-  case class State(modules: List[TypedModule])
+  case class State(modules: List[TypedModule], context: Context)
   def compile(
       sortedModules: List[String],
       modules: List[AgexModule],
       globalContext: Context
   ) = {
     ZIO
-      .foldLeft(sortedModules)(State(Nil)) { (s, moduleName) =>
+      .foldLeft(sortedModules)(State(Nil, globalContext)) { (s, moduleName) =>
         val module = modules.find(_.name == moduleName).get
         for {
-          typedModule <- module match {
+          (typedModule, ctx) <- module match {
             case it: ModuleDefinition =>
               // Add aliased modules to the context as the alias
               val aliasedModules = it.aliases.map(moduleName =>
                 modules.find(_.name == moduleName).get
               )
               for {
-                aliasedContext <- ZIO.foldLeft(aliasedModules)(globalContext)(
+                aliasedContext <- ZIO.foldLeft(aliasedModules)(s.context)(
                   Module.addToAliasedContext
                 )
                 _ <- pPrint(it, "modele to alias")
@@ -156,10 +156,22 @@ class Compiler(
                     TypedModule(it.name, it.aliases, typedStatements)
                   )
                   .asSome
+                  .tupleRight(aliasedContext)
               } yield result
-            case it: ElixirModule => ZIO.none
+            case it: ElixirModule =>
+              val aliasedModules = it.aliases.map(moduleName =>
+                modules.find(_.name == moduleName).get
+              )
+              for {
+                aliasedContext <- ZIO.foldLeft(aliasedModules)(globalContext)(
+                  Module.addToAliasedContext
+                )
+              } yield (None, aliasedContext)
           }
-        } yield s.copy(modules = typedModule.toList ::: s.modules)
+        } yield s.copy(
+          context = ctx,
+          modules = typedModule.toList ::: s.modules
+        )
       }
       .map(_.modules)
   }
