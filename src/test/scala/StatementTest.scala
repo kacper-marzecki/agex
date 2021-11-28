@@ -21,27 +21,25 @@ object StatementTest extends DefaultRunnableSpec {
         (alias Application.Math)
         (def amount 1)
         (defn increment
-          ([Integer] Integer)
+          ([integer] integer)
           [a] (Math.plus a amount))
       )
       """
     val x      = Compiler.fileToModule(module)
     val ass = equalTo(
       List(
-        Left(
-          ModuleDefinition(
-            "Kek",
-            List("Application.Math"),
-            List(
-              ModuleAttribute("amount", ELiteral(LInt(1))),
-              FunctionDef(
-                "increment",
-                TFunction(List(TVariable("Integer")), TVariable("Integer")),
-                List("a"),
-                EFunctionApplication(
-                  EVariable("Math.plus"),
-                  List(EVariable("a"), EVariable("amount"))
-                )
+        ModuleDefinition(
+          "Kek",
+          List("Application.Math"),
+          List(
+            ModuleAttribute("amount", ELiteral(LInt(1))),
+            FunctionDef(
+              "increment",
+              TFunction(List(TLiteral(LTInt)), TLiteral(LTInt)),
+              List("a"),
+              EFunctionApplication(
+                EVariable("Math.plus"),
+                List(EVariable("a"), EVariable("amount"))
               )
             )
           )

@@ -134,7 +134,10 @@ object FunctionTest extends DefaultRunnableSpec {
       )
       assertM(runSynth(expr, stdCtx).flip)(
         equalTo(
-          AppError.TypeNotApplicableToLiteral(TLiteral(LTInt), LBool(false))
+          AppError.CompilationError(
+            expr,
+            AppError.TypeNotApplicableToLiteral(TLiteral(LTInt), LBool(false))
+          )
         )
       )
     },
@@ -143,7 +146,9 @@ object FunctionTest extends DefaultRunnableSpec {
         aPlusBPlusC,
         List(ELiteral(LInt(1)), ELiteral(LInt(1)))
       )
-      assertM(runSynth(expr, stdCtx).flip)(equalTo(AppError.WrongArity(3, 2)))
+      assertM(runSynth(expr, stdCtx).flip)(
+        equalTo(AppError.CompilationError(expr, AppError.WrongArity(3, 2)))
+      )
     },
     testM("nullary functions work") {
       val expr = EFunctionApplication(

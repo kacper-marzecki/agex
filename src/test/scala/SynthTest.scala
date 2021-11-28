@@ -246,7 +246,8 @@ object SynthTest extends DefaultRunnableSpec {
       val expr = EAnnotation(ELiteral(LBool(true)), TTypeRef("annotatedType"))
       assertM(runSynth(expr).flip)(
         Assertion.assertion("raises correct error")() {
-          case it: AppError.TypeNotKnown if it.name == "annotatedType" =>
+          case AppError.CompilationError(_, AppError.TypeNotKnown(_, name))
+              if name == "annotatedType" =>
             true
           case _ => false
         }
@@ -258,7 +259,12 @@ object SynthTest extends DefaultRunnableSpec {
       )
       val expr = EAnnotation(ELiteral(LInt(1)), TTypeRef("Boolean"))
       assertM(runSynth(expr, ctx).flip)(
-        equalTo(AppError.TypeNotApplicableToLiteral(TLiteral(LTBool), LInt(1)))
+        equalTo(
+          AppError.CompilationError(
+            expr,
+            AppError.TypeNotApplicableToLiteral(TLiteral(LTBool), LInt(1))
+          )
+        )
       )
     },
     testM("uses type alias in type annotations") {

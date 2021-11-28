@@ -11,7 +11,7 @@ import LiteralType.*
 import Literal.*
 import ContextElement.*
 import TestCommonExpressions.*
-import CommonTestFunctions.runSynth
+import CommonTestFunctions.*
 
 object StructTest extends DefaultRunnableSpec {
 
@@ -59,7 +59,7 @@ object StructTest extends DefaultRunnableSpec {
         List(ELiteral(LString("asd")))
       )
 
-      assertM(runSynth(expr))(
+      assertM(runSynth(expr).tapError(pPrint(_, "TARGET")))(
         equalTo(
           TStruct(
             Map[String, Type](
@@ -125,8 +125,10 @@ object StructTest extends DefaultRunnableSpec {
         EFunctionApplication(EVariable("lambda"), List(struct))
       )
 
-      assertM(runSynth(expr).flip)(
-        equalTo(AppError.MissingFields(List("B", "C")))
+      assertM(runSynth(expr).flip.map(getCompilationErrorCause))(
+        equalTo(
+          AppError.MissingFields(List("B", "C"))
+        )
       )
     },
     testM("fails when struct field has incorrect Type ") {
@@ -153,8 +155,10 @@ object StructTest extends DefaultRunnableSpec {
         EFunctionApplication(EVariable("lambda"), List(struct))
       )
 
-      assertM(runSynth(expr).flip)(
-        equalTo(AppError.TypesNotEqual(TLiteral(LTString), TLiteral(LTBool)))
+      assertM(runSynth(expr).flip.map(getCompilationErrorCause))(
+        equalTo(
+          AppError.TypesNotEqual(TLiteral(LTString), TLiteral(LTBool))
+        )
       )
     }
   )

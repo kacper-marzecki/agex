@@ -17,8 +17,8 @@ object Tokenizer {
     'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'u', 'w', 'y', 'v', 'z', 'x')
   val uppercaseAlphabet = lowercaseAlphabet.map(_.toUpper)
   val specialIdChars =
-    List('?', '!', '&', '*', '/', '+', '-', '%', ':', '=', '.', '|')
-  val numbers                = (1 to 9).map(_.toString.charAt(0)).toList
+    List('?', '!', '&', '*', '/', '+', '-', '%', ':', '=', '.', '|', '_')
+  val numbers                = (0 to 9).map(_.toString.charAt(0)).toList
   val whitespaces0: P0[Unit] = P.charIn(" \t\r\n,").void.rep0.void
   val pIdentifier =
     (P

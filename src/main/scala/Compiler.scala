@@ -54,10 +54,11 @@ class Compiler(
   val loadAgexCoreFiles = loadFilesInDirectory("agex")
   def compile(filePath: String): Eff[Unit] = {
     for {
-      files         <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
-      agesCoreFiles <- loadAgexCoreFiles
-      modules       <- (files ++ agesCoreFiles).foldMapM(fileToModule)
-      _             <- validateUniqueModules(modules)
+      files           <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
+      agesCoreFiles   <- loadAgexCoreFiles
+      modules         <- (files ++ agesCoreFiles).foldMapM(fileToModule)
+      agexCoreModules <- agesCoreFiles.foldMapM(fileToModule)
+      _               <- validateUniqueModules(modules)
       existingModules = modules.map(_.name).toSet
       dependenciesAndModules <- getModuleDependencies(modules, existingModules)
       moduleToModulesDependingOnIt = dependenciesAndModules
@@ -85,7 +86,9 @@ class Compiler(
             modules.find(_.name == moduleName).get
           )
       }
-
+      defaultContextWithCoreModules <- ZIO.foldLeft(agexCoreModules)(
+        defaultContext
+      )(Module.addToLocalContext)
       _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
       _ <- pPrint(sortedModules, "MODULES")
 
@@ -93,8 +96,12 @@ class Compiler(
         dependenciesAndModules,
         "DEPENDENCIES AND MODULES"
       )
-      typedModules <- compile(sortedModules, modules, defaultContext)
-      _            <- pPrint(typedModules, "TYPED MODULES")
+      typedModules <- compile(
+        sortedModules,
+        modules,
+        defaultContextWithCoreModules
+      )
+      _ <- pPrint(typedModules, "TYPED MODULES")
 
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
@@ -140,6 +147,8 @@ class Compiler(
                                 gamma,
                                 TEAnnotation(TEFunction(_, typed, _), _, _)
                               ) =>
+                            println("statement._type")
+                            println(statement._type)
                             List(
                               TypedStatement
                                 .FunctionDef(
