@@ -1,7 +1,4 @@
-(defelixir Kernel.Math
-  (deftype AdditionResult integer))
-
+; moduł do tworzenia typowanych interfejsów to bibliotek napisanych w Elixir
 (defelixir Kernel 
-  (alias Kernel.Math)
-  (def + ([integer integer] Math.AdditionResult) "Kernel.+" )
+  (def + ([integer integer] integer) "Kernel.+" )
   (def = ([any any] boolean) "Kernel.==" ))

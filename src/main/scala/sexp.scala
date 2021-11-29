@@ -242,7 +242,7 @@ object Sexp {
       case SSquareList(bindings) :: body :: Nil =>
         for {
           nameExpressionPairs_? <- bindings
-            .sliding(2)
+            .sliding(2, 2)
             .toList
             .foldMapM(parseLetBinding(_).map(List(_)))
           nameExpressionPairs <- nameExpressionPairs_? match {
@@ -264,7 +264,7 @@ object Sexp {
     xs match {
       case SId(name) :: body :: Nil =>
         toAst(body).map((name, _))
-      case _ => Left("structure of a let binding:  `name expression`")
+      case a => Left("structure of a let binding:  `name expression`")
     }
 
   def parseFunctionApplication(
@@ -312,6 +312,14 @@ object Sexp {
             retT  <- parseType(returnType)
             argsT <- args.map(parseType).sequence
           } yield TFunction(argsT, retT)
+        }
+        case SId("forall") :: SSquareList(
+              typeArgs
+            ) :: quantifiedType :: Nil => {
+          for {
+            quantT <- parseType(quantifiedType)
+            args   <- typeArgs.map(requireId).sequence
+          } yield TMulQuantification(args.map(_.value), quantT)
         }
         case _type :: typeArguments =>
           for {

@@ -15,7 +15,7 @@ object ContextTest extends DefaultRunnableSpec {
   val solved5 = CSolved("solved5", TLiteral(LTString))
   val context = Context(Vector(solved1, solved2, solved3))
 
-  def spec = suite("ContextSpec")(
+  def spec = suite("ContextTest")(
     testM("split works") {
       for {
         result <- context.splitAt(solved2)

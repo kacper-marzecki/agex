@@ -1,0 +1,34 @@
+(defmodule App.Example
+  ; alias do modułu pozwala odwoływać się do innych modułów bez pełnej nazwy - np `Types` zamiast `App.Example.Types`
+  (alias App.Example.Types)  
+
+  ; definicja funkcji
+  (defn parse 
+    ; argumenty i typ zwracany przez funkcję
+    ; w tym przypadku funkcja zwraca union-type: albo tuple'a {:ok integer} albo {:error Types.Errors}
+    ([string] (| {:ok integer} 
+                  {:error Types.Errors}))
+    ; deklaracja zmiennych lokalnych w bloku `let`
+     [input]  (let [error_fn (unfortunate_error_checker "13") 
+                    lucky_string "42"
+                    lucky_number 42] 
+                (if (= input lucky_string) 
+                  {:ok lucky_number}
+                  ; wywoływanie funkcji `(function arg1 arg2)`
+                  {:error (error_fn input)})))
+
+  ; Funkcja tworząca anonimową funkcję sprawdzającą czy number jest 'unlucky'
+  (defn unfortunate_error_checker 
+    ([string] (fn [string] (| :other_error :unfortunate_error)))
+    [unlucky_string] 
+      (fn [str]
+        (if (= str unlucky_string) 
+                            :unfortunate_error 
+                            :other_error))))
+
+
+(defmodule App.Example.Types
+  ; tworzenie aliasów do typów 
+  (deftype Errors (| :unfortunate_error :other_error :yet_another_error )))
+
+
