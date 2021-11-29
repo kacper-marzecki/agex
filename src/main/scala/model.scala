@@ -1,4 +1,5 @@
 import Type.TAny
+import scala.collection.concurrent.TNode
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -136,6 +137,28 @@ sealed trait Type {
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
     }
+
+  // def mapLeafs(f: PartialFunction[Type, Type]): Type =
+  //   val map = (t: Type) => PartialFunction.condOpt(t)(f).getOrElse(t)
+  //   this match {
+  //     case it: TValue       => map(it)
+  //     case it: TLiteral     => map(it)
+  //     case it: TVariable    => map(it)
+  //     case TAny             => map(it)
+  //     case TNothing         => map(it)
+  //     case TList(types)     => types.map(map)
+  //     case it: TExistential => map(it)
+  //     case TFunction(argTypes, returnType) =>
+  //       TFunction(argTypes.map(map), map(returnType))
+  //     case TQuantification(name, quantType)     => TQuantification(name, map())
+  //     case TMulQuantification(names, quantType) => ???
+  //     case TSum(x, y)                           => ???
+  //     case TTypeApp(quant, args)                => ???
+  //     case TTuple(valueTypes)                   => ???
+  //     case TTypeRef(name)                       => ???
+  //     case TStruct(fieldTypes)                  => ???
+  //     case TMap(mappings)                       => ???
+  //   }
 }
 
 sealed trait TMapping {

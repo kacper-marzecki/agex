@@ -7,7 +7,7 @@
     ; argumenty i typ zwracany przez funkcję
     ; w tym przypadku funkcja zwraca union-type: albo tuple'a {:ok integer} albo {:error Types.Errors}
     ([string] (| {:ok integer} 
-                  {:error Types.Errors}))
+                  (Types.Err Types.Errors)))
     ; deklaracja zmiennych lokalnych w bloku `let`
      [input]  (let [error_fn (unfortunate_error_checker "13") 
                     lucky_string "42"
@@ -28,7 +28,10 @@
 
 
 (defmodule App.Example.Types
+  (alias App.Example.Types)
   ; tworzenie aliasów do typów 
+  (deftype Tuple (forall [a b] {a b}))
+  (deftype Err (forall [a] (Types.Tuple :error a)))
   (deftype Errors (| :unfortunate_error :other_error :yet_another_error )))
 
 
