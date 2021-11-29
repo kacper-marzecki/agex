@@ -23,7 +23,7 @@ object Compiler {
     _ =>
       ZIO(
         scala.io.Source
-          .fromFile("test.rkt")
+          .fromFile("test.agex")
           .getLines
           .toList
           .foldSmash("", "\n", "")

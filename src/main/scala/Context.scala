@@ -134,7 +134,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
     case TNothing         => ZIO.unit
     case TList(valueType) => checkIsWellFormed(context, valueType)
     case TVariable(name) =>
-      if (context.hasTypeDefinition(name) || context.hasVariable(name)) ZIO.unit
+      if (context.hasVariable(name)) ZIO.unit
       else
         fail(TypeNotWellFormed(context, _type))
     case TFunction(args, ret) =>

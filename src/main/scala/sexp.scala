@@ -11,6 +11,7 @@ import Type.*
 import TMapping.Required
 import Statement.*
 import LiteralType.*
+import scala.util.Random
 
 object Sexp {
   def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
@@ -242,7 +243,7 @@ object Sexp {
       case SSquareList(bindings) :: body :: Nil =>
         for {
           nameExpressionPairs_? <- bindings
-            .sliding(2)
+            .sliding(2, 2)
             .toList
             .foldMapM(parseLetBinding(_).map(List(_)))
           nameExpressionPairs <- nameExpressionPairs_? match {
@@ -264,7 +265,7 @@ object Sexp {
     xs match {
       case SId(name) :: body :: Nil =>
         toAst(body).map((name, _))
-      case _ => Left("structure of a let binding:  `name expression`")
+      case a => Left("structure of a let binding:  `name expression`")
     }
 
   def parseFunctionApplication(
@@ -313,6 +314,17 @@ object Sexp {
             argsT <- args.map(parseType).sequence
           } yield TFunction(argsT, retT)
         }
+        case SId("forall") :: SSquareList(
+              typeArgs
+            ) :: quantifiedType :: Nil => {
+          for {
+            quantT <- parseType(quantifiedType)
+            args   <- typeArgs.map(requireId).sequence
+            // _ = quantT
+          } yield replaceTypeRefsWithTVars(
+            TMulQuantification(args.map(_.value), quantT)
+          )
+        }
         case _type :: typeArguments =>
           for {
             typedType     <- parseType(_type)
@@ -333,7 +345,46 @@ object Sexp {
         .flatMap(paired)
         .map(pairs => TMap(pairs.map(Required.apply.tupled)))
   }
-
+  // TODO impure
+  var a = 0
+  def replaceTypeRefsWithTVars(
+      t: Type,
+      priorBindings: Map[String, String] = Map()
+  ): Type = {
+    val f = replaceTypeRefsWithTVars(_, priorBindings)
+    t match {
+      case TList(valueType) => f(valueType)
+      case TFunction(argTypes, returnType) =>
+        TFunction(argTypes.map(f), f(returnType))
+      case it: TMulQuantification =>
+        a += 1
+        val x        = a
+        val newNames = it.names.map(a => (a, s"$a$x")).toMap
+        val nameMap  = priorBindings ++ newNames
+        TMulQuantification(
+          it.names.map(newNames),
+          replaceTypeRefsWithTVars(it._type, nameMap)
+        )
+      case TSum(x, y) => TSum(f(x), f(y))
+      case TTypeApp(quant, args) =>
+        TTypeApp(
+          replaceTypeRefsWithTVars(quant, priorBindings),
+          args.map(replaceTypeRefsWithTVars(_, priorBindings))
+        )
+      case TTuple(valueTypes) => TTuple(valueTypes.map(f))
+      case TVariable(name)    => TVariable(priorBindings(name))
+      case TTypeRef(name) =>
+        priorBindings
+          .get(name)
+          .fold(TTypeRef(name))(TVariable(_))
+      case TMap(mappings) =>
+        TMap(mappings.map {
+          case TMapping.Required(k, v) => TMapping.Required(f(k), f(v))
+          case TMapping.Optional(k, v) => TMapping.Optional(f(k), f(v))
+        })
+      case other => other
+    }
+  }
   // TODO should probably be specific to SExp to be able to include line info in the error
   def paired[A](list: List[A]): Either[String, List[(A, A)]] =
     if (list.size % 2 == 0) {
