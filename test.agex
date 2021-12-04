@@ -1,37 +1,37 @@
-(defmodule App.Example
-  ; alias do modułu pozwala odwoływać się do innych modułów bez pełnej nazwy - np `Types` zamiast `App.Example.Types`
-  (alias App.Example.Types)  
 
-  ; definicja funkcji
+(defmodule App.Example
+  (alias App.Example.Types
+         App.ErrorChecker)  
+
   (defn parse 
-    ; argumenty i typ zwracany przez funkcję
-    ; w tym przypadku funkcja zwraca union-type: albo tuple'a {:ok integer} albo {:error Types.Errors}
-    ([string] (| {:ok integer} 
-                  (Types.Err Types.Errors)))
-    ; deklaracja zmiennych lokalnych w bloku `let`
-     [input]  (let [error_fn (unfortunate_error_checker "13") 
+    ([string] (Types.Result integer Types.Errors))
+     [input]  (let [error_fn (ErrorChecker.unfortunate_error_checker "13") 
                     lucky_string "42"
                     lucky_number 42] 
                 (if (= input lucky_string) 
                   {:ok lucky_number}
-                  ; wywoływanie funkcji `(function arg1 arg2)`
                   {:error (error_fn input)})))
 
-  ; Funkcja tworząca anonimową funkcję sprawdzającą czy number jest 'unlucky'
-  (defn unfortunate_error_checker 
-    ([string] (fn [string] (| :other_error :unfortunate_error)))
-    [unlucky_string] 
-      (fn [str]
-        (if (= str unlucky_string) 
-                            :unfortunate_error 
-                            :other_error))))
+  )
 
+(defmodule App.ErrorChecker
+  (defn unfortunate_error_checker 
+      ([string] (fn [string] (| :other_error :unfortunate_error)))
+      [unlucky_string] 
+        (fn [str]
+          (if (= str unlucky_string) 
+                              :unfortunate_error 
+                              :other_error))))
 
 (defmodule App.Example.Types
   (alias App.Example.Types)
-  ; tworzenie aliasów do typów 
-  (deftype Tuple (forall [a b] {a b}))
-  (deftype Err (forall [a] (Types.Tuple :error a)))
-  (deftype Errors (| :unfortunate_error :other_error :yet_another_error )))
+  (deftype Result  
+    (forall [a b] 
+      (| {:ok a}
+         {:error b})))
+  (deftype Errors (| :unfortunate_error 
+                     :other_error 
+                     :yet_another_error )))
+
 
 

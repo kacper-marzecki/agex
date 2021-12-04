@@ -40,9 +40,8 @@ object Compiler {
         .tapError(pPrint(_, "PARSER ERR"))
 
       modules <- ZIO
-        .fromEither(sexps.map(Sexp.toModule(_)).sequence)
+        .foreach(sexps)(Sexp.toModule)
         .tapError(pPrint(_, "ASD"))
-        .mapError(AppError.AstTransformationError(_))
     } yield modules
 }
 

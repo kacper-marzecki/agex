@@ -44,19 +44,21 @@ object CommonTestFunctions {
       case e                               => e
     }
 
-  def stringToExpr(str: String) = {
+  def stringToExpr(str: String): Eff[Expression] = {
     for {
-      sexpr <- ZIO.fromEither(Tokenizer.pExpr.parseAll(str))
-      ast   <- ZIO.fromEither(Sexp.toAst(sexpr))
+      sexpr <- ZIO
+        .fromEither(Tokenizer.pExpr.parseAll(str))
+        .mapError(AppError.ParserError(_))
+      ast <- Sexp.toAst(sexpr)
     } yield ast
   }
 
-  def parseAndSynth(str: String) = {
+  def parseAndSynth(str: String) = toZIO({
     for {
       expr    <- stringToExpr(str)
       synthed <- runSynth(expr)
     } yield (expr, synthed)
-  }
+  })
 
   def toZIO[A](eff: Eff[A]) =
     eff.provideSomeLayer[zio.ZEnv](CompilerState.live)
