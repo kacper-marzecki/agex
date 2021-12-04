@@ -49,7 +49,7 @@ def findM[R, E, A, B](
     test: A => ZIO[R, E, B],
     ifNotFound: => E
 ): ZIO[R, E, B] =
-  collection.tailRecM {
+  collection.toList.tailRecM {
     case Nil     => ZIO.fail(ifNotFound)
     case x :: xs => test(x).fold(_ => Left(xs), Right(_))
   }

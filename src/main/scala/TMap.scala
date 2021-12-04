@@ -72,6 +72,6 @@ def shouldHaveOptionalMapping(_type: Type, context: Context): Boolean = {
     case TStruct(fieldTypes)  => containsOptionalType(fieldTypes.values.toList)
     case TMap(kvs) => containsOptionalType(kvs.flatMap(it => List(it.k, it.v)))
     case TFunction(args, ret) => false
-    case TSum(a, b)           => true
+    case TSum(_)              => true
   }
 }

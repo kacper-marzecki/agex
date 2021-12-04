@@ -50,10 +50,9 @@ object ListTest extends DefaultRunnableSpec {
             ),
             TList(
               TSum(
-                TSum(
-                  TSum(TValue(VTInt(1)), TValue(VTInt(2))),
-                  TValue(VTInt(3))
-                ),
+                TValue(VTInt(1)),
+                TValue(VTInt(2)),
+                TValue(VTInt(3)),
                 TValue(VTAtom("atom"))
               )
             )

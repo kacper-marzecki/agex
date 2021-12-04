@@ -31,17 +31,18 @@ object TypeAnnotationTest extends DefaultRunnableSpec {
                 )
               ),
               TList(
-                TSum(TValue(VTInt(3)), TSum(TValue(VTInt(1)), TValue(VTInt(2))))
+                TSum(TValue(VTInt(3)), TValue(VTInt(1)), TValue(VTInt(2)))
               )
             ),
             TList(
-              TSum(TValue(VTInt(3)), TSum(TValue(VTInt(1)), TValue(VTInt(2))))
+              TSum(TValue(VTInt(3)), TValue(VTInt(1)), TValue(VTInt(2)))
             )
           )
         )
       )
     },
     testM("annotated function") {
+      val tSum1and2 = TSum(TValue(VTInt(1)), TValue(VTInt(2)))
       assertM(parseAndSynth("""(: (fn [(| 1 2)] {(| 1 2) (| 1 2)}) 
                                |  (fn [a] {a a}))""".stripMargin))(
         equalTo(
@@ -51,24 +52,11 @@ object TypeAnnotationTest extends DefaultRunnableSpec {
                 List("a"),
                 ETuple(List(EVariable("a"), EVariable("a")))
               ),
-              TFunction(
-                List(TSum(TValue(VTInt(1)), TValue(VTInt(2)))),
-                TTuple(
-                  List(
-                    TSum(TValue(VTInt(1)), TValue(VTInt(2))),
-                    TSum(TValue(VTInt(1)), TValue(VTInt(2)))
-                  )
-                )
-              )
+              TFunction(List(tSum1and2), TTuple(List(tSum1and2, tSum1and2)))
             ),
             TFunction(
-              List(TSum(TValue(VTInt(1)), TValue(VTInt(2)))),
-              TTuple(
-                List(
-                  TSum(TValue(VTInt(1)), TValue(VTInt(2))),
-                  TSum(TValue(VTInt(1)), TValue(VTInt(2)))
-                )
-              )
+              List(tSum1and2),
+              TTuple(List(tSum1and2, tSum1and2))
             )
           )
         )

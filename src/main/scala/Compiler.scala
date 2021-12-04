@@ -325,9 +325,8 @@ class Compiler(
         kvs.flatMap(it =>
           getModuleReferences(it.k) ++ getModuleReferences(it.v)
         )
-      case TSum(a: Type, b: Type) =>
-        getModuleReferences(b) ++ getModuleReferences(a)
-
+      case TSum(xs) =>
+        xs.flatMap(getModuleReferences).toList
       case TFunction(args: List[Type], ret: Type) =>
         args.flatMap(getModuleReferences) ++ getModuleReferences(ret)
       case TTypeApp(_type: Type, args: List[Type]) =>
