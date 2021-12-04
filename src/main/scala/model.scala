@@ -129,7 +129,7 @@ sealed trait Type {
     this match {
       case _: Type.TQuantification    => false
       case _: Type.TMulQuantification => false
-      case Type.TSum(x, y)            => x.isMonotype && y.isMonotype
+      case Type.TSum(xs)              => xs.forall(_.isMonotype)
       // TODO: is TTypeApp a monotype ? i dont think so, eg the arg can be quantified
       case Type.TTypeApp(q, args) =>
         false // args.forall(_.isMonotype) && q.isMonotype
@@ -186,10 +186,21 @@ object Type {
   case class TTuple(valueTypes: List[Type])         extends Type
   case class TTypeRef(targetType: String)           extends Type
   case class TStruct(fieldTypes: Map[String, Type]) extends Type
-  // case class TSum(types: Set[Type])                 extends Type
-  case class TList(valueType: Type)    extends Type
-  case class TMap(kvs: List[TMapping]) extends Type
-  case class TSum(a: Type, b: Type)    extends Type
+  case class TList(valueType: Type)                 extends Type
+  case class TMap(kvs: List[TMapping])              extends Type
+  // case class TSum(a: Type, b: Type)    extends Type
+  case class TSum(types: Set[Type]) extends Type
+  object TSum {
+    def create(types: Set[Type]) = {
+      def flatten(ts: Set[Type]): Set[Type] =
+        ts.flatMap {
+          case Type.TSum(xs) => flatten(xs)
+          case other         => Set(other)
+        }
+      new TSum(flatten(types))
+    }
+    def apply(types: Type*): TSum = create(types.toSet)
+  }
 
   case class TFunction(args: List[Type], ret: Type) extends Type
   // TODO: think out: only quantifications are polymorphic, what if we could introduce a new Type: TypeApplication ? TQuantification then would be something akin to a Type lambda ?
@@ -229,7 +240,7 @@ object Type {
       case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
-      case TSum(x, y)           => TSum(repl(x), repl(y))
+      case TSum(xs)             => TSum(xs.map(repl))
       case other                => other
     }
   }

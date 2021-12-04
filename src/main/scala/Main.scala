@@ -285,11 +285,10 @@ def substitution(
         }
         .map(TMap(_))
     }
-    case TSum(x, y) => {
-      for {
-        substitutedX <- substitution(context, x, alpha, b)
-        substitutedY <- substitution(context, y, alpha, b)
-      } yield TSum(substitutedX, substitutedY)
+    case TSum(xs) => {
+      ZIO
+        .foreach(xs)(substitution(context, _, alpha, b))
+        .map(TSum.create(_))
     }
     case TStruct(fieldTypes) =>
       ZIO
@@ -344,8 +343,8 @@ def occursIn(
         mappings.flatMap(it => List(it.k, it.v)),
         occursIn(context, alpha, _)
       )
-    case TSum(x, y) =>
-      anyM(List(x, y), occursIn(context, alpha, _))
+    case TSum(xs) =>
+      anyM(xs, occursIn(context, alpha, _))
   }
 }
 
@@ -396,19 +395,20 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         // firstly, the same subtyping logic as in functions apply
         ???
       }
-      case (TSum(a, b), sum: TSum) => {
-        subtype(context, a, sum).flatMap(subtype(_, b, sum))
+      case (TSum(xs), sum: TSum) => {
+        ZIO.foldLeft(xs)(context)(subtype(_, _, sum))
+        // subtype(context, a, sum).flatMap(subtype(_, b, sum))
       }
-      case (t, TSum(x, y)) => {
+      case (t, TSum(xs)) => {
         findM(
-          List(x, y),
+          xs,
           subtype(context, t, _),
           AppError.CannotSubtype(context, t, b)
         )
       }
-      case (TSum(x, y), other) => {
+      case (TSum(xs), other) => {
         findM(
-          List(x, y),
+          xs,
           subtype(context, _, other),
           AppError.CannotSubtype(context, a, b)
         )
@@ -633,7 +633,8 @@ def synthesizesTo(
 
 def commonSupertype(zero: Type, iterable: Iterable[Type]): Type = {
   // hacky, needs a proper implementation
-  iterable.fold(zero)((a, b) => TSum(a, b))
+  TSum(iterable.toSet ++ Set(zero))
+  // iterable.fold(zero)((a, b) => TSum(a, b))
 }
 
 // Figure 11. Algorithmic typing

@@ -161,7 +161,7 @@ def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
       } else {
         fail(TypeNotKnown(context, targetType))
       }
-    case TSum(x, y) => ZIO.foreach_(List(x, y))(checkIsWellFormed(context, _))
+    case TSum(xs) => ZIO.foreach_(xs)(checkIsWellFormed(context, _))
     case it @ TTypeApp(_type, args) =>
       ZIO.foreach_(_type :: args)(
         checkIsWellFormed(context, _)
@@ -200,11 +200,10 @@ def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
     case TMulQuantification(names, quantType) =>
       // 1:1 TQuantification port
       applyContext(quantType, context).map(TMulQuantification(names, _))
-    case TSum(x, y) =>
-      for {
-        appliedX <- applyContext(x, context)
-        appliedY <- applyContext(y, context)
-      } yield TSum(appliedX, appliedY)
+    case TSum(xs) =>
+      ZIO
+        .foreach(xs)(applyContext(_, context))
+        .map(TSum.create(_))
     case TTypeApp(quant, args) =>
       for {
         q <- applyContext(quant, context)

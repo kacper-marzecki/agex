@@ -30,6 +30,29 @@ object SumTest extends DefaultRunnableSpec {
       assertM(runSynth(exp))(
         equalTo(stringOrInt)
       )
+    },
+    testM("sum type is flattened") {
+      val exp =
+        EAnnotation(
+          ELiteral(LInt(1)),
+          TSum(
+            TLiteral(LTString),
+            TSum(
+              TLiteral(LTInt),
+              TLiteral(LTAtom)
+            )
+          )
+        )
+
+      assertM(runSynth(exp))(
+        equalTo(
+          TSum(
+            TLiteral(LTString),
+            TLiteral(LTInt),
+            TLiteral(LTAtom)
+          )
+        )
+      )
     }
   )
 }

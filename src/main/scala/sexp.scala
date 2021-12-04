@@ -317,14 +317,11 @@ object Sexp {
     case SString(value) => succeed(TValue(VTString(value)))
     case SList(elements) =>
       elements match {
-        case SId("|") :: sum1 :: sum2 :: sums =>
+        case SId("|") :: sum1 :: sums =>
           for {
             sum1T <- parseType(sum1)
-            sum2T <- parseType(sum2)
             sumsT <- foreach(sums)(parseType)
-          } yield sumsT.foldLeft(TSum(sum1T, sum2T)) { case (agg, x) =>
-            TSum(x, agg)
-          }
+          } yield TSum.create(sumsT.toSet ++ Set(sum1T))
         case Nil => succeed(TValue(VTUnit))
         case SId("fn") :: SSquareList(args) :: returnType :: Nil => {
           for {
@@ -383,7 +380,7 @@ object Sexp {
             )
           )
         }
-      case TSum(x, y) => mapN(f(x), f(y))(TSum(_, _))
+      case TSum(xs) => foreach(xs)(f).map(TSum.create(_))
       case TTypeApp(quant, args) =>
         for {
           quant <- replaceTypeRefsWithTVars(quant, priorBindings)
