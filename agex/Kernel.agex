@@ -1,4 +1,3 @@
-; moduł do tworzenia typowanych interfejsów to bibliotek napisanych w Elixir
 (defelixir Kernel 
   (def + ([integer integer] integer) "Kernel.+" )
   (def = ([any any] boolean) "Kernel.==" ))

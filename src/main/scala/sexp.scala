@@ -12,16 +12,22 @@ import TMapping.Required
 import Statement.*
 import LiteralType.*
 import scala.util.Random
+import zio.ZIO.{succeed, mapN, foreach}
+import zio.ZIO
+import zio.interop.catz.*
+
+def failWith(str: String): Eff[Nothing] =
+  ZIO.fail(AppError.AstTransformationError(str))
 
 object Sexp {
-  def toAstList(exprsList: List[SExp]): Either[String, List[Expression]] =
+  def toAstList(exprsList: List[SExp]): Eff[List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
 
-  def toAst(expr: SExp): Either[String, Expression] = {
+  def toAst(expr: SExp): Eff[Expression] = {
     expr match {
       case SId(it) =>
         parseId(it)
-      case SString(it) => Right(ELiteral(LString(it)))
+      case SString(it) => succeed(ELiteral(LString(it)))
       case SList(xs)   => sexp(xs)
       case SSquareList(xs) =>
         toAstList(xs).map(EList(_))
@@ -29,7 +35,7 @@ object Sexp {
       case SMapLiteral(xs) => parseMap(xs)
       // TODO missing structs
       // transforming into a struct
-      // if (xs.size % 2 != 0) Left("not even struct elements")
+      // if (xs.size % 2 != 0) failWith("not even struct elements")
       // else {
       //   val a = xs
       //     .sliding(2)
@@ -40,7 +46,7 @@ object Sexp {
       //           l <- requireId(k).map(_.value)
       //           r <- toAst(v)
       //         } yield List((l, r))
-      //       case _ => Left("Should not occur")
+      //       case _ => failWith("Should not occur")
       //     }
       //     .map(pairs => EStruct(pairs.toMap))
       // }
@@ -50,7 +56,7 @@ object Sexp {
   // Here we're handling special forms, and in the future I guess this would be the place to expand macros
   // TODO think out: macros
   def sexp(exprs: List[SExp]) = exprs match {
-    case Nil                 => Right(ELiteral(LUnit))
+    case Nil                 => succeed(ELiteral(LUnit))
     case SId("fn") :: xs     => parseArgsAndBody(xs)
     case SId(":") :: xs      => parseTypeAnnotation(xs)
     case SId("let") :: xs    => parseLet(xs)
@@ -61,7 +67,7 @@ object Sexp {
 
   def toModule(
       expr: SExp
-  ): Either[String, AgexModule] = {
+  ): Eff[AgexModule] = {
     expr match {
       case SList(
             SId("defmodule") :: SId(moduleName) :: SList(
@@ -74,9 +80,13 @@ object Sexp {
             .map(it => ModuleDefinition(moduleName, aliases, it))
         )
       case SList(SId("defmodule") :: SId(moduleName) :: moduleMembers) =>
-        moduleMembers
-          .foldMapM(toStatement(_).map(List(_)))
-          .map(it => ModuleDefinition(moduleName, List(), it))
+        toModule(
+          SList(
+            SId("defmodule") :: SId(moduleName) :: SList(
+              List(SId("alias"))
+            ) :: moduleMembers
+          )
+        )
       case SList(
             SId("defelixir") :: SId(moduleName) :: SList(
               SId("alias") :: aliasList
@@ -91,19 +101,19 @@ object Sexp {
         moduleMembers
           .foldMapM(toElixirModuleStatement(_).map(List(_)))
           .map(it => ElixirModule(moduleName, List(), it))
-      case _ => Left(s"Expected module definition, got: $expr")
+      case _ => failWith(s"Expected module definition, got: $expr")
     }
   }
 
   def getAliases(aliases: List[SExp]) =
     aliases.foldMapM {
-      case SId(name) => Right(List(name))
-      case _         => Left("Only module names allowed in aliases ")
+      case SId(name) => succeed(List(name))
+      case _         => failWith("Only module names allowed in aliases ")
     }
 
   def toElixirModuleStatement(
       expr: SExp
-  ): Either[String, ElixirModuleStatement] =
+  ): Eff[ElixirModuleStatement] =
     expr match {
       case SList(
             SId("def") :: SId(functionName) :: SList(
@@ -121,12 +131,13 @@ object Sexp {
         )
       case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
         parseType(_type).map(ElixirTypeDef(name, _))
-      case _ => Left(s"Unrecognized Elixir interface module construct: $expr")
+      case _ =>
+        failWith(s"Unrecognized Elixir interface module construct: $expr")
     }
 
   def requireId(expr: SExp) = expr match {
-    case it: SId => Right(it)
-    case _       => Left("required Id")
+    case it: SId => succeed(it)
+    case _       => failWith("required Id")
   }
 
   def parseArgsAndBody(xs: List[SExp]) =
@@ -137,21 +148,23 @@ object Sexp {
           bodyExpr <- toAst(body)
         } yield EFunction(args.map(_.value), bodyExpr)
       case _ =>
-        Left("structure of an anonymous function: `(fn [arg1 arg2] (body))`")
+        failWith(
+          "structure of an anonymous function: `(fn [arg1 arg2] (body))`"
+        )
     }
 
   def parseIdType(str: String) = {
     str match {
-      case "integer" => Right(TLiteral(LTInt))
-      case "float"   => Right(TLiteral(LTFloat))
-      case "boolean" => Right(TLiteral(LTBool))
-      case "string"  => Right(TLiteral(LTString))
-      case "char"    => Right(TLiteral(LTChar))
-      case "any"     => Right(TAny)
+      case "integer" => succeed(TLiteral(LTInt))
+      case "float"   => succeed(TLiteral(LTFloat))
+      case "boolean" => succeed(TLiteral(LTBool))
+      case "string"  => succeed(TLiteral(LTString))
+      case "char"    => succeed(TLiteral(LTChar))
+      case "any"     => succeed(TAny)
       case str if str.startsWith(":") =>
-        Right(TValue(VTAtom(str.substring(1))))
-      case "()"  => Right(TValue(VTUnit))
-      case "nil" => Right(TValue(VTNil))
+        succeed(TValue(VTAtom(str.substring(1))))
+      case "()"  => succeed(TValue(VTUnit))
+      case "nil" => succeed(TValue(VTNil))
       case _ =>
         List(
           str.toIntOption.map(it => TValue(VTInt(it))),
@@ -159,11 +172,11 @@ object Sexp {
           str.toFloatOption.map(it => TValue(VTFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(Right(TTypeRef((str))))(Right(_))
+          .fold(succeed(TTypeRef((str))))(succeed(_))
     }
   }
 
-  def toStatement(expr: SExp): Either[String, Statement] =
+  def toStatement(expr: SExp): Eff[Statement] =
     expr match {
       // TODO match on statement type and check proper structure in other functions
       case SList(
@@ -179,8 +192,8 @@ object Sexp {
           )
           body <- toAst(functionBody)
           argumentNames <- args.foldMapM {
-            case SId(name) => Right(List(name))
-            case other     => Left(s"Expected argument name, got: $other")
+            case SId(name) => succeed(List(name))
+            case other     => failWith(s"Expected argument name, got: $other")
           }
         } yield FunctionDef(
           functionName,
@@ -192,14 +205,14 @@ object Sexp {
         toAst(attributeBody).map(ModuleAttribute(attributeName, _))
       case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
         parseType(_type).map(TypeDef(name, _))
-      case _ => Left(s"Unrecognized top-level construct: $expr")
+      case _ => failWith(s"Unrecognized top-level construct: $expr")
     }
   def parseId(str: String) = {
     str match {
       case str if str.startsWith(":") =>
-        Right(ELiteral(LAtom(str.substring(1))))
-      case "()"  => Right(ELiteral(LUnit))
-      case "nil" => Right(ELiteral(LNil))
+        succeed(ELiteral(LAtom(str.substring(1))))
+      case "()"  => succeed(ELiteral(LUnit))
+      case "nil" => succeed(ELiteral(LNil))
       case _ =>
         List(
           str.toIntOption.map(it => ELiteral(LInt(it))),
@@ -207,7 +220,7 @@ object Sexp {
           str.toFloatOption.map(it => ELiteral(LFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(Right(EVariable((str))))(Right(_))
+          .fold(succeed(EVariable((str))))(succeed(_))
     }
   }
 
@@ -223,7 +236,8 @@ object Sexp {
           parsedType       <- parseType(annotatedTypeSexp)
           parsedExpression <- toAst(expressionSexp)
         } yield EAnnotation(parsedExpression, parsedType)
-      case _ => Left("structure of a type annotation:  `(: type expression)`")
+      case _ =>
+        failWith("structure of a type annotation:  `(: type expression)`")
     }
 
   def parseIf(xs: List[SExp]) =
@@ -235,7 +249,9 @@ object Sexp {
           ifFalseE <- toAst(ifFalse)
         } yield EIf(condE, ifTrueE, ifFalseE)
       case _ =>
-        Left("Structure of an if expression: (if condition if-true if-false)")
+        failWith(
+          "Structure of an if expression: (if condition if-true if-false)"
+        )
     }
 
   def parseLet(xs: List[SExp]) =
@@ -247,30 +263,30 @@ object Sexp {
             .toList
             .foldMapM(parseLetBinding(_).map(List(_)))
           nameExpressionPairs <- nameExpressionPairs_? match {
-            case first :: rest => Right(NonEmptyList(first, rest))
+            case first :: rest => succeed(NonEmptyList(first, rest))
             case _ =>
-              Left("at least one let binding is required in the let form ")
+              failWith("at least one let binding is required in the let form ")
           }
           bodyExpr <- toAst(body)
         } yield nameExpressionPairs.toList.foldRight(bodyExpr) {
           case ((name, binding), acc) => ELet(name, binding, acc)
         }
       case _ =>
-        Left(
+        failWith(
           s"structure of a type annotation:  `(: type expression)`, found: ${xs}"
         )
     }
 
-  def parseLetBinding(xs: List[SExp]): Either[String, (String, Expression)] =
+  def parseLetBinding(xs: List[SExp]): Eff[(String, Expression)] =
     xs match {
       case SId(name) :: body :: Nil =>
         toAst(body).map((name, _))
-      case a => Left("structure of a let binding:  `name expression`")
+      case a => failWith("structure of a let binding:  `name expression`")
     }
 
   def parseFunctionApplication(
       xs: List[SExp]
-  ): Either[String, EFunctionApplication] =
+  ): Eff[EFunctionApplication] =
     xs match {
       case function :: args =>
         for {
@@ -278,10 +294,12 @@ object Sexp {
           argsE     <- toAstList(args)
         } yield EFunctionApplication(functionE, argsE)
       case _ =>
-        Left("structure of a function application: (function-name arg1 arg2)")
+        failWith(
+          "structure of a function application: (function-name arg1 arg2)"
+        )
     }
 
-  def parseTypeAlias(xs: List[SExp]): Either[String, Expression] =
+  def parseTypeAlias(xs: List[SExp]): Eff[Expression] =
     xs match {
       case SId(name) :: typeDef :: body :: Nil =>
         for {
@@ -289,29 +307,29 @@ object Sexp {
           parsedBody    <- toAst(body)
         } yield ETypeAlias(name, parsedTypeDef, parsedBody)
       case _ =>
-        Left(
+        failWith(
           "structure of a type alias:  `(type  newName someType in-expression`"
         )
     }
 
-  def parseType(sexp: SExp): Either[String, Type] = sexp match {
+  def parseType(sexp: SExp): Eff[Type] = sexp match {
     case SId(value)     => parseIdType(value)
-    case SString(value) => Right(TValue(VTString(value)))
+    case SString(value) => succeed(TValue(VTString(value)))
     case SList(elements) =>
       elements match {
         case SId("|") :: sum1 :: sum2 :: sums =>
           for {
             sum1T <- parseType(sum1)
             sum2T <- parseType(sum2)
-            sumsT <- sums.map(parseType).sequence
+            sumsT <- foreach(sums)(parseType)
           } yield sumsT.foldLeft(TSum(sum1T, sum2T)) { case (agg, x) =>
             TSum(x, agg)
           }
-        case Nil => Right(TValue(VTUnit))
+        case Nil => succeed(TValue(VTUnit))
         case SId("fn") :: SSquareList(args) :: returnType :: Nil => {
           for {
             retT  <- parseType(returnType)
-            argsT <- args.map(parseType).sequence
+            argsT <- foreach(args)(parseType)
           } yield TFunction(argsT, retT)
         }
         case SId("forall") :: SSquareList(
@@ -319,80 +337,85 @@ object Sexp {
             ) :: quantifiedType :: Nil => {
           for {
             quantT <- parseType(quantifiedType)
-            args   <- typeArgs.map(requireId).sequence
-            // _ = quantT
-          } yield replaceTypeRefsWithTVars(
-            TMulQuantification(args.map(_.value), quantT)
-          )
+            args   <- foreach(typeArgs)(requireId)
+            res <- replaceTypeRefsWithTVars(
+              TMulQuantification(args.map(_.value), quantT)
+            )
+          } yield res
         }
         case _type :: typeArguments =>
           for {
             typedType     <- parseType(_type)
-            typedTypeArgs <- typeArguments.map(parseType).sequence
+            typedTypeArgs <- foreach(typeArguments)(parseType)
           } yield TTypeApp(typedType, typedTypeArgs)
       }
     case SSquareList(elements) =>
       elements match {
         case x :: Nil => parseType(x).map(TList(_))
-        case Nil      => Right(TList(TNothing))
-        case _        => Left("Structure of a List type : [] | [TypeName]")
+        case Nil      => succeed(TList(TNothing))
+        case _        => failWith("Structure of a List type : [] | [TypeName]")
       }
-    case SCurlyList(elements) => elements.map(parseType).sequence.map(TTuple(_))
+    case SCurlyList(elements) => foreach(elements)(parseType).map(TTuple(_))
+
     case SMapLiteral(elements) =>
-      elements
-        .map(parseType)
-        .sequence
+      foreach(elements)(parseType)
         .flatMap(paired)
         .map(pairs => TMap(pairs.map(Required.apply.tupled)))
   }
-  // TODO impure
-  var a = 0
+
   def replaceTypeRefsWithTVars(
       t: Type,
       priorBindings: Map[String, String] = Map()
-  ): Type = {
+  ): Eff[Type] = {
     val f = replaceTypeRefsWithTVars(_, priorBindings)
     t match {
       case TList(valueType) => f(valueType)
       case TFunction(argTypes, returnType) =>
-        TFunction(argTypes.map(f), f(returnType))
+        mapN(foreach(argTypes)(f), f(returnType))(TFunction(_, _))
       case it: TMulQuantification =>
-        a += 1
-        val x        = a
-        val newNames = it.names.map(a => (a, s"$a$x")).toMap
-        val nameMap  = priorBindings ++ newNames
-        TMulQuantification(
-          it.names.map(newNames),
-          replaceTypeRefsWithTVars(it._type, nameMap)
-        )
-      case TSum(x, y) => TSum(f(x), f(y))
+        CompilerState.makeExistential.flatMap { x =>
+          val newNames = it.names.map(a => (a, s"$a$x")).toMap
+          val nameMap  = priorBindings ++ newNames
+          replaceTypeRefsWithTVars(it._type, nameMap).map(
+            TMulQuantification(
+              it.names.map(newNames),
+              _
+            )
+          )
+        }
+      case TSum(x, y) => mapN(f(x), f(y))(TSum(_, _))
       case TTypeApp(quant, args) =>
-        TTypeApp(
-          replaceTypeRefsWithTVars(quant, priorBindings),
-          args.map(replaceTypeRefsWithTVars(_, priorBindings))
-        )
-      case TTuple(valueTypes) => TTuple(valueTypes.map(f))
-      case TVariable(name)    => TVariable(priorBindings(name))
+        for {
+          quant <- replaceTypeRefsWithTVars(quant, priorBindings)
+          args  <- foreach(args)(replaceTypeRefsWithTVars(_, priorBindings))
+        } yield TTypeApp(quant, args)
+      case TTuple(valueTypes) => foreach(valueTypes)(f).map(TTuple(_))
+      case TVariable(name)    => succeed(TVariable(priorBindings(name)))
       case TTypeRef(name) =>
-        priorBindings
-          .get(name)
-          .fold(TTypeRef(name))(TVariable(_))
+        succeed(
+          priorBindings
+            .get(name)
+            .fold(TTypeRef(name))(TVariable(_))
+        )
       case TMap(mappings) =>
-        TMap(mappings.map {
-          case TMapping.Required(k, v) => TMapping.Required(f(k), f(v))
-          case TMapping.Optional(k, v) => TMapping.Optional(f(k), f(v))
-        })
-      case other => other
+        foreach(mappings) {
+          case TMapping.Required(k, v) =>
+            mapN(f(k), f(v))(TMapping.Required(_, _))
+          case TMapping.Optional(k, v) =>
+            mapN(f(k), f(v))(TMapping.Optional(_, _))
+        }.map(TMap(_))
+
+      case other => succeed(other)
     }
   }
   // TODO should probably be specific to SExp to be able to include line info in the error
-  def paired[A](list: List[A]): Either[String, List[(A, A)]] =
+  def paired[A](list: List[A]): Eff[List[(A, A)]] =
     if (list.size % 2 == 0) {
       list.grouped(2).toList.foldMapM {
-        case one :: two :: Nil => Right(List((one, two)))
-        case _                 => Left("Should not occur")
+        case one :: two :: Nil => succeed(List((one, two)))
+        case _                 => failWith("Should not occur")
       }
     } else {
-      Left("the number of elements must be even")
+      failWith("the number of elements must be even")
     }
 }

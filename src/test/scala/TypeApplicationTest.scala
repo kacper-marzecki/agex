@@ -15,7 +15,6 @@ import java.util.function.ToIntFunction
 import javax.swing.plaf.basic.BasicTextFieldUI
 
 object TypeApplicationTest extends DefaultRunnableSpec {
-
   val EitherType = TMulQuantification(
     List("A", "B"),
     TSum(
