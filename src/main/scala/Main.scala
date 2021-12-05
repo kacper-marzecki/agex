@@ -1,7 +1,7 @@
 import cats.implicits.*
 import zio.*
 import zio.console.{putStrLn, putStrLnErr}
-import ZIO.{succeed, fail}
+import ZIO.{succeed, fail, foreach}
 import AppError.*
 import Type.*
 import Literal.*
@@ -13,6 +13,7 @@ import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
+import Pattern.*
 
 def assertLiteralChecksAgainst(
     literal: Literal,
@@ -247,19 +248,18 @@ def substitution(
     case it @ TTypeApp(q, args) =>
       for {
         quant <- substitution(context, q, alpha, b)
-        args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        args  <- foreach(args)(substitution(context, _, alpha, b))
       } yield TTypeApp(quant, args)
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
-      ZIO
-        .foreach(valueTypes)(substitution(context, _, alpha, b))
+      foreach(valueTypes)(substitution(context, _, alpha, b))
         .map(TTuple(_))
     case TList(valueType) =>
       substitution(context, valueType, alpha, b)
         .map(TList(_))
     case TFunction(args, ret) =>
       for {
-        argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        argTypes <- foreach(args)(substitution(context, _, alpha, b))
         retType  <- substitution(context, ret, alpha, b)
       } yield TFunction(argTypes, retType)
     case TTypeRef(name) =>
@@ -267,34 +267,31 @@ def substitution(
         .getTypeDefinition(name)
         .flatMap(substitution(context, _, alpha, b))
     case TMap(mappings) => {
-      ZIO
-        .foreach(mappings) { it =>
-          it match {
-            case Required(k, v) =>
-              for {
-                substitutedK <- substitution(context, k, alpha, b)
-                substitutedV <- substitution(context, v, alpha, b)
-              } yield Required(substitutedK, substitutedV)
-            case Optional(k, v) =>
-              for {
-                substitutedK <- substitution(context, k, alpha, b)
-                substitutedV <- substitution(context, v, alpha, b)
-              } yield Optional(substitutedK, substitutedV)
-          }
-
+      foreach(mappings) { it =>
+        it match {
+          case Required(k, v) =>
+            for {
+              substitutedK <- substitution(context, k, alpha, b)
+              substitutedV <- substitution(context, v, alpha, b)
+            } yield Required(substitutedK, substitutedV)
+          case Optional(k, v) =>
+            for {
+              substitutedK <- substitution(context, k, alpha, b)
+              substitutedV <- substitution(context, v, alpha, b)
+            } yield Optional(substitutedK, substitutedV)
         }
+
+      }
         .map(TMap(_))
     }
     case TSum(xs) => {
-      ZIO
-        .foreach(xs)(substitution(context, _, alpha, b))
+      foreach(xs)(substitution(context, _, alpha, b))
         .map(TSum.create(_))
     }
     case TStruct(fieldTypes) =>
-      ZIO
-        .foreach(fieldTypes) { case (k, v) =>
-          substitution(context, v, alpha, b).map((k, _))
-        }
+      foreach(fieldTypes) { case (k, v) =>
+        substitution(context, v, alpha, b).map((k, _))
+      }
         .map(TStruct.apply)
   }
 }
@@ -554,7 +551,7 @@ def applicationSynthesizesTo(
     case TExistential(name) => {
       for {
         retAlpha  <- CompilerState.makeExistential
-        argAlphas <- ZIO.foreach(exprs)(_ => CompilerState.makeExistential)
+        argAlphas <- foreach(exprs)(_ => CompilerState.makeExistential)
         gamma <- context.insertInPlace(
           CExistential(name),
           CExistential(retAlpha) ::
@@ -682,11 +679,10 @@ def synthesizesTo(
     //→I⇒
     case EFunction(args, ret) => {
       for {
-        (sigmas, sigmaVariables) <- ZIO
-          .foreach(args)(arg =>
-            CompilerState.makeExistential
-              .map(sigma => (sigma, CTypedVariable(arg, TExistential(sigma))))
-          )
+        (sigmas, sigmaVariables) <- foreach(args)(arg =>
+          CompilerState.makeExistential
+            .map(sigma => (sigma, CTypedVariable(arg, TExistential(sigma))))
+        )
           .map(it => split(it))
         tau <- CompilerState.makeExistential
         gamma <- context.addAll(
@@ -776,8 +772,53 @@ def synthesizesTo(
         delta
       )
     }
+
+    case ECase(expr, matches) => {
+      for {
+        (exprTyped, delta) <- synthesizesTo(context, expr)
+        _ <- foreach(matches) { case (m, e) =>
+          exprTyped._type
+          succeed(())
+        }
+        // for each match check if inferred type from pattern checks against the cased expression
+        // extract Match VAR types ? how ??  bind them in context for their expressions
+        // collect typed expressions
+      } yield ???
+    }
   }
 }.mapError(e => AppError.CompilationError(expr, e))
+
+// returns var bindings
+def getMatch(
+    ctx: Context,
+    exprType: Type,
+    pattern: Pattern
+): Eff[(Map[String, Type], Type)] = {
+  (pattern, exprType) match {
+    case (PPin(expression), t) =>
+      for {
+        (pinExprTyped, _) <- synthesizesTo(ctx, expression)
+        _                 <- subtype(ctx, pinExprType, exprType)
+      } yield (Map(), exprType)
+    case PVar(name) =>
+      succeed((Map(name -> exprType), exprType))
+    case PLiteral(value) =>
+      checksAgainst(context, value, exprType).as((Map(), exprType))
+    case (PList(values), TList(listType)) =>
+      val a: Int = ZIO.foldLeft(values.filter(_ != PListRest))(Map()) {
+        case (acc, a) =>
+          for {
+            (m, t) <- getMatch(ctx, listType, v)
+          } yield acc ++ m
+      }
+      ???
+    case PListRest => ???
+    // if (exprType)
+    case PTuple(values) => ???
+    case PMap(kvs)      => ???
+    case _              => fail(AppError.PatternDoesntMatch(pattern, exprType))
+  }
+}
 
 def synth(
     expr: Expression,

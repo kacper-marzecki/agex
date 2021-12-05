@@ -8,10 +8,9 @@
      [input]  (let [error_fn (ErrorChecker.unfortunate_error_checker "13") 
                     lucky_string "42"
                     lucky_number 42] 
-                (if (= input lucky_string) 
-                  {:ok lucky_number}
-                  {:error (error_fn input)})))
-
+                (case input
+                  ((^ lucky_number) {:ok lucky_number})
+                  (other {:error (error_fn input)}))))
   )
 
 (defmodule App.ErrorChecker

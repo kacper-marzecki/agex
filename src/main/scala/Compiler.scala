@@ -8,7 +8,7 @@ import Expression.*
 import TypedExpression.*
 import Type.*
 import scala.annotation.meta.field
-
+import Pattern.*
 case class ModuleDependencies(
     module: AgexModule,
     dependencies: List[String]
@@ -293,6 +293,10 @@ class Compiler(
         getModuleReferences(body)
       case EFunctionApplication(fun: Expression, args: List[Expression]) =>
         getModuleReferences(fun) ++ args.flatMap(getModuleReferences)
+      case ECase(exp, cases) =>
+        cases.flatMap { case (m, e) =>
+          getModuleReferences(m) ++ getModuleReferences(e)
+        } ++ getModuleReferences(exp)
       case EIf(
             condition: Expression,
             ifTrue: Expression,
@@ -301,8 +305,15 @@ class Compiler(
         getModuleReferences(condition) ++ getModuleReferences(
           ifTrue
         ) ++ getModuleReferences(ifFalse)
-
     }
+
+  def getModuleReferences(it: Pattern): List[String] = {
+    it match {
+      case PPin(exp) => getModuleReferences(exp)
+      case _         => Nil
+    }
+  }
+
   def getModuleReferences(it: Type): List[String] =
     it match {
       case TAny                               => Nil
