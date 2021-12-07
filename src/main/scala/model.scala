@@ -315,7 +315,7 @@ object TypedExpression {
 
   case class TECase(
       expr: TypedExpression,
-      cases: List[(TypedPattern, TypedExpression)]
+      cases: List[(TypedPattern, TypedExpression)],
       _type: Type
   ) extends TypedExpression
 }

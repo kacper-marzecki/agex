@@ -1,7 +1,7 @@
 import cats.implicits.*
 import zio.*
 import zio.console.{putStrLn, putStrLnErr}
-import ZIO.{succeed, fail, foreach}
+import ZIO.{succeed, fail, foreach, foldLeft, foldRight}
 import AppError.*
 import Type.*
 import Literal.*
@@ -28,7 +28,7 @@ def assertLiteralChecksAgainst(
     case (LAtom(_), LTAtom)     => ZIO.unit
     case (LUnit, LTUnit)        => ZIO.unit
     case _ =>
-      ZIO.fail(AppError.TypeNotApplicableToLiteral(TLiteral(_type), literal))
+      fail(AppError.TypeNotApplicableToLiteral(TLiteral(_type), literal))
   }
 }
 
@@ -37,7 +37,7 @@ def assertLiteralChecksAgainst(
     _type: ValueType
 ): Eff[Unit] = {
   val failure: IO[AppError.TypeNotApplicableToLiteral, Nothing] =
-    ZIO.fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
+    fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
   (literal, _type) match {
     case (LAtom(value), VTAtom(valueType)) =>
       if (valueType == value) ZIO.unit else failure
@@ -125,7 +125,7 @@ def checksAgainst(
     case (EList(values), TList(valueType)) => {
       for {
         a <- synthesizesTo(context, values)
-        x <- ZIO.foldRight(values)(
+        x <- foldRight(values)(
           TEAggregation(Nil, context)
         ) { case (expression, result) =>
           for {
@@ -184,7 +184,7 @@ def checksAgainst(
         if values.length == valueTypes.length => {
       for {
         // fold right to avoid appending the typedElement to the result list with O(n)
-        result <- ZIO.foldRight(values.zip(valueTypes))(
+        result <- foldRight(values.zip(valueTypes))(
           TEAggregation(Nil, context)
         ) { case ((expression, _type), result) =>
           for {
@@ -380,7 +380,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             args1.size == args2.size,
             WrongArity(args2.size, args1.size)
           )
-          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+          theta <- foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
               subtype(delta, arg2, arg1)
           }
@@ -393,7 +393,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         ???
       }
       case (TSum(xs), sum: TSum) => {
-        ZIO.foldLeft(xs)(context)(subtype(_, _, sum))
+        foldLeft(xs)(context)(subtype(_, _, sum))
         // subtype(context, a, sum).flatMap(subtype(_, b, sum))
       }
       case (t, TSum(xs)) => {
@@ -419,7 +419,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
         } else {
-          ZIO.foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
+          foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
             subtype(delta, a, b)
           }
         }
@@ -432,7 +432,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           val commonFields = fieldsB.keys.toList.mapFilter(it =>
             (extractedKeys.included.get(it), fieldsB.get(it)).bisequence
           )
-          ZIO.foldLeft(commonFields)(context) { case (delta, (a, b)) =>
+          foldLeft(commonFields)(context) { case (delta, (a, b)) =>
             subtype(delta, a, b)
           }
         }
@@ -488,7 +488,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             args1.size == args2.size,
             WrongArity(args2.size, args1.size)
           )
-          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+          theta <- foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
               subtype(delta, arg1, arg2)
           }
@@ -567,7 +567,7 @@ def applicationSynthesizesTo(
               )
             )
         )
-        result <- ZIO.foldLeft(argAlphas.zip(exprs))(
+        result <- foldLeft(argAlphas.zip(exprs))(
           TEAggregation(Nil, gamma)
         ) { case (result, (alpha1, expr)) =>
           for {
@@ -603,7 +603,7 @@ def applicationSynthesizesTo(
           argTypes.size == exprs.size,
           WrongArity(argTypes.size, exprs.size)
         )
-        res <- ZIO.foldLeft(exprs.zip(argTypes))(TEAggregation(Nil, context)) {
+        res <- foldLeft(exprs.zip(argTypes))(TEAggregation(Nil, context)) {
           case (acc, (arg, argType)) =>
             for {
               (typed, delta) <- checksAgainst(acc.context, arg, argType)
@@ -622,7 +622,7 @@ def synthesizesTo(
     exprs: Iterable[Expression]
 ): Eff[TEAggregation] =
   // fold right to avoid appending the typedElement to the result list with O(n)
-  ZIO.foldRight(exprs)(TEAggregation(Nil, context)) { (elem, result) =>
+  foldRight(exprs)(TEAggregation(Nil, context)) { (elem, result) =>
     for {
       (elemTyped, gamma) <- synthesizesTo(result.context, elem)
     } yield TEAggregation(elemTyped :: result.typed, gamma)
@@ -649,7 +649,7 @@ def synthesizesTo(
     case EVariable(name) => {
       context
         .getAnnotation(name)
-        .fold(ZIO.fail(AnnotationNotFound(context, name)))(annotation =>
+        .fold(fail(AnnotationNotFound(context, name)))(annotation =>
           succeed((TEVariable(name, annotation), context))
         )
     }
@@ -798,24 +798,35 @@ def getMatch(
     case (PPin(expression), t) =>
       for {
         (pinExprTyped, _) <- synthesizesTo(ctx, expression)
-        _                 <- subtype(ctx, pinExprType, exprType)
+        _                 <- subtype(ctx, pinExprTyped._type, exprType)
       } yield (Map(), exprType)
-    case PVar(name) =>
-      succeed((Map(name -> exprType), exprType))
-    case PLiteral(value) =>
-      checksAgainst(context, value, exprType).as((Map(), exprType))
+    case (PVar(name), t) =>
+      succeed((Map(name -> t), t))
+    case (PLiteral(value), t) =>
+      checksAgainst(ctx, value, t).as((Map(), t))
     case (PList(values), TList(listType)) =>
-      val a: Int = ZIO.foldLeft(values.filter(_ != PListRest))(Map()) {
-        case (acc, a) =>
+      foldLeft(values.filter(_ != PListRest))(Map[String, Type]()) {
+        case (acc, v) =>
           for {
             (m, t) <- getMatch(ctx, listType, v)
           } yield acc ++ m
       }
-      ???
-    case PListRest => ???
+        .map((_, TList(listType)))
+    case (PListRest, _) =>
+      fail(AppError.Unexpected("should not happen, invalid state"))
     // if (exprType)
-    case PTuple(values) => ???
-    case PMap(kvs)      => ???
+    case (PTuple(values), TTuple(valueTypes)) =>
+      for {
+        _ <- assertTrue(
+          values.length == valueTypes.length,
+          AppError.PatternDoesntMatch(pattern, exprType)
+        )
+        _ <- foldLeft(values.zip(valueTypes))(Map[String, Type]()) {
+          case (acc, (p, t)) =>
+            acc
+        }
+      } yield ???
+    case (PMap(kvs), _) => ???
     case _              => fail(AppError.PatternDoesntMatch(pattern, exprType))
   }
 }

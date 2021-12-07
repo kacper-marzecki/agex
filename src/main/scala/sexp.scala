@@ -319,7 +319,7 @@ object Sexp {
           if (elems.reverse.tail.contains(PListRest)) {
             failWith("cannot use rest pattern in the middle of the list")
           } else
-            succeed(MList(elems))
+            succeed(PList(elems))
         }
       case SMapLiteral(xs) =>
         for {
