@@ -103,8 +103,6 @@ object Pattern {
   case class PMap(kvs: List[(Pattern, Pattern)])  extends Pattern
 }
 
-
-
 sealed trait ValueType(val literalType: Type.TLiteral)
 object ValueType {
   // TODO: do we need a unit and nil value types ?
@@ -320,18 +318,17 @@ object TypedExpression {
   ) extends TypedExpression
 }
 
-sealed trait TypedPattern 
+sealed trait TypedPattern
 
-object TypedPattern { 
-  case class TPPin(expression: TypedExpression)         extends TypedPattern
-  case class TPVar(name: String)                    extends TypedPattern
-  case class TPLiteral(value: Expression.ELiteral) extends TypedPattern
-  case class TPList(values: List[Pattern])         extends TypedPattern
-  case object TPListRest                           extends TypedPattern
-  case class TPTuple(values: List[Pattern])        extends TypedPattern
-  case class TPMap(kvs: List[(Pattern, Pattern)])  extends TypedPattern  
+object TypedPattern {
+  case class TPPin(expression: TypedExpression)             extends TypedPattern
+  case class TPVar(name: String)                            extends TypedPattern
+  case class TPLiteral(value: Expression.ELiteral)          extends TypedPattern
+  case class TPList(values: List[TypedPattern])             extends TypedPattern
+  case object TPListRest                                    extends TypedPattern
+  case class TPTuple(values: List[TypedPattern])            extends TypedPattern
+  case class TPMap(kvs: List[(TypedPattern, TypedPattern)]) extends TypedPattern
 }
-
 
 sealed trait ContextElement {
   def name: String

@@ -14,7 +14,7 @@ import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
 import Pattern.*
-
+import TypedPattern.*
 def assertLiteralChecksAgainst(
     literal: Literal,
     _type: LiteralType
@@ -776,14 +776,25 @@ def synthesizesTo(
     case ECase(expr, matches) => {
       for {
         (exprTyped, delta) <- synthesizesTo(context, expr)
-        _ <- foreach(matches) { case (m, e) =>
-          exprTyped._type
-          succeed(())
+        patternsAndBranches <- foreach(matches) { case (m, e) =>
+          for {
+            (typedPattern, bindings, t) <- getMatch(context, exprTyped._type, m)
+            ctxWithNames <- foldLeft(bindings.toList)(context) {
+              case (ctx, (name, t)) => ctx.add(CTypedVariable(name, t))
+            }
+            (branchTyped, theta) <- synthesizesTo(ctxWithNames, e)
+          } yield (typedPattern, branchTyped)
         }
+        t = TSum.create(patternsAndBranches.map { case (_, typedBranch) =>
+          typedBranch._type
+        }.toSet)
         // for each match check if inferred type from pattern checks against the cased expression
         // extract Match VAR types ? how ??  bind them in context for their expressions
         // collect typed expressions
-      } yield ???
+      } yield (
+        TECase(exprTyped, patternsAndBranches, t),
+        delta
+      )
     }
   }
 }.mapError(e => AppError.CompilationError(expr, e))
@@ -793,25 +804,29 @@ def getMatch(
     ctx: Context,
     exprType: Type,
     pattern: Pattern
-): Eff[(Map[String, Type], Type)] = {
+): Eff[(TypedPattern, Map[String, Type], Type)] = {
   (pattern, exprType) match {
     case (PPin(expression), t) =>
       for {
         (pinExprTyped, _) <- synthesizesTo(ctx, expression)
         _                 <- subtype(ctx, pinExprTyped._type, exprType)
-      } yield (Map(), exprType)
+      } yield (TPPin(pinExprTyped), Map(), exprType)
     case (PVar(name), t) =>
-      succeed((Map(name -> t), t))
+      succeed((TPVar(name), Map(name -> t), t))
     case (PLiteral(value), t) =>
-      checksAgainst(ctx, value, t).as((Map(), t))
-    case (PList(values), TList(listType)) =>
-      foldLeft(values.filter(_ != PListRest))(Map[String, Type]()) {
-        case (acc, v) =>
-          for {
-            (m, t) <- getMatch(ctx, listType, v)
-          } yield acc ++ m
+      checksAgainst(ctx, value, t).map { case (typed, ctx) =>
+        (TPLiteral(value), Map(), t)
       }
-        .map((_, TList(listType)))
+    case (PList(values), TList(listType)) =>
+      for {
+        (bindings, tPatterns) <- foldLeft(values.filter(_ != PListRest))(
+          (Map[String, Type](), List[TypedPattern]())
+        ) { case ((acc, tPatterns), v) =>
+          for {
+            (tPattern, m, t) <- getMatch(ctx, listType, v)
+          } yield (acc ++ m, tPatterns.appended(tPattern))
+        }
+      } yield (TPList(tPatterns), bindings, TList(listType))
     case (PListRest, _) =>
       fail(AppError.Unexpected("should not happen, invalid state"))
     // if (exprType)
@@ -821,11 +836,18 @@ def getMatch(
           values.length == valueTypes.length,
           AppError.PatternDoesntMatch(pattern, exprType)
         )
-        _ <- foldLeft(values.zip(valueTypes))(Map[String, Type]()) {
-          case (acc, (p, t)) =>
-            acc
+        (patterns, map, types) <- foldLeft(values.zip(valueTypes))(
+          (List[TypedPattern](), Map[String, Type](), List[Type]())
+        ) { case ((patterns, typeMap, types), (p, t)) =>
+          getMatch(ctx, t, p).map { case (tPattern, rTypeMap, rType) =>
+            (
+              patterns.appended(tPattern),
+              typeMap ++ rTypeMap,
+              types.appended(t)
+            )
+          }
         }
-      } yield ???
+      } yield (TPTuple(patterns), map, TTuple(types))
     case (PMap(kvs), _) => ???
     case _              => fail(AppError.PatternDoesntMatch(pattern, exprType))
   }

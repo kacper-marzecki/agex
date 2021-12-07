@@ -9,8 +9,8 @@
                     lucky_string "42"
                     lucky_number 42] 
                 (case input
-                  ((^ lucky_number) {:ok lucky_number})
-                  (other {:error (error_fn input)}))))
+                  ((^ lucky_string) {:ok lucky_number})
+                  (other {:error other}))))
   )
 
 (defmodule App.ErrorChecker
