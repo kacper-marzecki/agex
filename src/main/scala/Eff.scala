@@ -21,6 +21,7 @@ enum AppError extends RuntimeException {
   case Unexpected(label: String)
   case WrongArity(expected: Int, actual: Int)
   case PatternDoesntMatch(pattern: Pattern, _type: Type)
+  case InvalidPattern(description: String)
   case UnknownError(throwable: Throwable)
   case ParserError(error: cats.parse.Parser.Error)
   case AstTransformationError(error: String)

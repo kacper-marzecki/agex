@@ -7,11 +7,20 @@
     ([string] (Types.Result integer Types.Errors))
      [input]  (let [error_fn (ErrorChecker.unfortunate_error_checker "13") 
                     lucky_string "42"
+                    a %{1 2 3 4}
                     lucky_number 42] 
                 (case input
                   ((^ lucky_string) {:ok lucky_number})
-                  (other {:error other}))))
-  )
+                  (other {:error (error_fn input)}))))
+                  
+  (defn match_map
+    ([string] (| 1 2))
+     ;; [input]  (let [ m (: %{1 2 3 integer} %{1 2 3 4})] 
+     [input]  (let [ m  %{1 2 3 4}] 
+                (case m
+                  (%{1 a} a)
+                  (other 1))))
+)
 
 (defmodule App.ErrorChecker
   (defn unfortunate_error_checker 

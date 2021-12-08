@@ -848,8 +848,50 @@ def getMatch(
           }
         }
       } yield (TPTuple(patterns), map, TTuple(types))
-    case (PMap(kvs), _) => ???
-    case _              => fail(AppError.PatternDoesntMatch(pattern, exprType))
+    case (PMap(kvsp), TMap(kvs)) =>
+      for {
+        _ <- assertTrue(
+          kvsp.collect { case (x: PVar, _) => x }.isEmpty,
+          AppError.InvalidPattern("Can only use literals in map key patterns")
+        )
+        patternsAndBindings <- foreach(kvsp) { (kPattern, vPattern) =>
+          for {
+            keyResults <- ZIO.foreach(kvs)(kv =>
+              ZIO
+                .tupled(
+                  getMatch(ctx, kv.k, kPattern),
+                  getMatch(ctx, kv.v, vPattern)
+                )
+                .either
+            )
+            successes = keyResults.collect { case Right(x) => x }
+            result <-
+              if (successes.isEmpty)
+                fail(AppError.PatternDoesntMatch(pattern, exprType))
+              else {
+                val bindings = successes.foldLeft(Map[String, Type]()) {
+                  case (acc, ((tp1, b1, _), (tp2, b2, _))) => acc ++ b1 ++ b2
+                }
+                val patternPair = successes.map {
+                  case ((tp1, b1, _), (tp2, b2, _)) => (tp1, tp2)
+                }.head
+                succeed((patternPair, bindings))
+              }
+          } yield result
+        }
+
+        // get key pattern
+        // for each mapping,  getMatch for key and value type, collect results where both key and value match
+        // we then get a List[(TypedPattern, Map[String, Type], Type), (TypedPattern, Map[String, Type], Type)]
+        // pick a hd of (TypedPattern, TypePattern) -> this will be the typed pattern pair for the mapping
+        // if the list is not empty it means at least one pattern matches the key type
+        // combine bindings
+        bindings = patternsAndBindings.foldLeft(Map[String, Type]()) {
+          case (acc, (_, b)) => acc ++ b
+        }
+        patterns = patternsAndBindings.map { case (p, b) => p }
+      } yield (TPMap(patterns), bindings, exprType)
+    case _ => fail(AppError.PatternDoesntMatch(pattern, exprType))
   }
 }
 
