@@ -12,13 +12,20 @@
                 (case input
                   ((^ lucky_string) {:ok lucky_number})
                   (other {:error (error_fn input)}))))
-                  
+  (deftype user_request %{
+    "username" string
+    "lastname" string
+
+    "age" number
+    string any 
+  })
   (defn match_map
-    ([string] (| 1 2))
-     ;; [input]  (let [ m (: %{1 2 3 integer} %{1 2 3 4})] 
-     [input]  (let [ m  %{1 2 3 4}] 
-                (case m
-                  (%{1 a} a)
+    ([] (| 1 2))
+     []  (let [ map %{:value 1 
+                    :nested_map %{ 1 "one" 
+                                  "string_key" {:tuple_elem 2}}}] 
+                (case map
+                  (%{:nested_map %{"string_key" {_ x}}} x)
                   (other 1))))
 )
 

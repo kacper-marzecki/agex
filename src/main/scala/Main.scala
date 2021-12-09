@@ -388,9 +388,28 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
-      case (TMap(kvsA), TMap(kvsB)) => {
-        // firstly, the same subtyping logic as in functions apply
-        ???
+      case (TMap(_), TMap(Nil))           => succeed(context)
+      case (TMap(Nil), TMap(kvB :: kvsB)) => fail(CannotSubtype(context, a, b))
+      case (TMap(mA :: msA), TMap(mB :: msB)) => {
+        def mSubtype(ctx: Context, m1: TMapping, m2: TMapping): Eff[Context] =
+          (m1, m2) match {
+            case (TMapping.Required(k1, v1), TMapping.Required(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+            case (TMapping.Optional(k1, v1), TMapping.Required(k2, v2)) =>
+              fail(CannotSubtype(context, a, b))
+            case (TMapping.Required(k1, v1), TMapping.Optional(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+            case (TMapping.Optional(k1, v1), TMapping.Optional(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+          }
+        for {
+          delta <- ZIO.foldLeft(mA :: msA)(context) { case (ctx, mapping) =>
+            ZIO.firstSuccessOf(
+              mSubtype(ctx, mapping, mB),
+              msB.map(mSubtype(ctx, mapping, _))
+            )
+          }
+        } yield delta
       }
       case (TSum(xs), sum: TSum) => {
         foldLeft(xs)(context)(subtype(_, _, sum))
