@@ -88,20 +88,22 @@ class Compiler(
       defaultContextWithCoreModules <- ZIO.foldLeft(agexCoreModules)(
         defaultContext
       )(Module.addToLocalContext)
-      _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
-      _ <- pPrint(sortedModules, "MODULES")
+      // _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
+      // _ <- pPrint(sortedModules, "MODULES")
 
-      _ <- pPrint(
-        dependenciesAndModules,
-        "DEPENDENCIES AND MODULES"
-      )
+      // _ <- pPrint(
+      // dependenciesAndModules,
+      // "DEPENDENCIES AND MODULES"
+      // )
       typedModules <- compile(
         sortedModules,
         modules,
         defaultContextWithCoreModules
       )
       _ <- pPrint(typedModules, "TYPED MODULES")
-
+      _ <- ZIO.foreach(typedModules.map(ElixirOutput.toElixir))(
+        pPrint(_, "MODULE")
+      )
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
