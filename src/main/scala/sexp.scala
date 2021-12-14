@@ -15,6 +15,7 @@ import scala.util.Random
 import zio.ZIO.{succeed, mapN, foreach}
 import zio.ZIO
 import zio.interop.catz.*
+import Pattern.*
 
 def failWith(str: String): Eff[Nothing] =
   ZIO.fail(AppError.AstTransformationError(str))
@@ -56,12 +57,17 @@ object Sexp {
   // Here we're handling special forms, and in the future I guess this would be the place to expand macros
   // TODO think out: macros
   def sexp(exprs: List[SExp]) = exprs match {
-    case Nil                 => succeed(ELiteral(LUnit))
-    case SId("fn") :: xs     => parseArgsAndBody(xs)
-    case SId(":") :: xs      => parseTypeAnnotation(xs)
-    case SId("let") :: xs    => parseLet(xs)
-    case SId("type") :: xs   => parseTypeAlias(xs)
-    case SId("if") :: xs     => parseIf(xs)
+    case Nil               => succeed(ELiteral(LUnit))
+    case SId("fn") :: xs   => parseArgsAndBody(xs)
+    case SId(":") :: xs    => parseTypeAnnotation(xs)
+    case SId("let") :: xs  => parseLet(xs)
+    case SId("type") :: xs => parseTypeAlias(xs)
+    case SId("if") :: xs   => parseIf(xs)
+    case SId("case") :: expr :: matches =>
+      for {
+        m <- foreach(matches)(parseMatch)
+        e <- toAst(expr)
+      } yield ECase(e, m)
     case functionApplication => parseFunctionApplication(functionApplication)
   }
 
@@ -282,6 +288,53 @@ object Sexp {
       case SId(name) :: body :: Nil =>
         toAst(body).map((name, _))
       case a => failWith("structure of a let binding:  `name expression`")
+    }
+
+  def parseMatch(m: SExp) = {
+    m match {
+      case SList(pattern :: expression :: Nil) =>
+        for {
+          e <- toAst(expression)
+          m <- parsePattern(pattern)
+        } yield (m, e)
+      case other =>
+        failWith("structure of a case match:  `(pattern expression)`")
+    }
+  }
+
+  def parsePattern(p: SExp, inList: Boolean = false): Eff[Pattern] =
+    p match {
+      case SList(List(SId("^"), sexp)) => toAst(sexp).map(PPin(_))
+      case SId("..") if inList         => succeed(PListRest)
+      case SString(s)     => succeed(PLiteral(ELiteral(LString(s))))
+      case SCurlyList(xs) => foreach(xs)(parsePattern(_, false)).map(PTuple(_))
+      case SId(s) =>
+        parseId(s).flatMap {
+          case EVariable(v)    => succeed(PVar(v))
+          case other: ELiteral => succeed(PLiteral(other))
+          // case other => failWith(s"invalid pattern expression: $other")
+        }
+      case SList(xs) =>
+        foreach(xs)(parsePattern(_, true)).flatMap { elems =>
+          if (elems.reverse.tail.contains(PListRest)) {
+            failWith("cannot use rest pattern in the middle of the list")
+          } else
+            succeed(PList(elems))
+        }
+      case SMapLiteral(xs) =>
+        for {
+          elems <- foreach(xs)(parsePattern(_, false))
+          s <- foreach(elems.sliding(2, 2).toList) {
+            case one :: two :: Nil =>
+              one match {
+                case PVar(_) =>
+                  failWith("Cannot use variable as a key in a map pattern")
+                case other => succeed((one, two))
+              }
+            case _ => ???
+          }
+        } yield PMap(s)
+      case _ => failWith(s"unrecognized pattern: $p")
     }
 
   def parseFunctionApplication(

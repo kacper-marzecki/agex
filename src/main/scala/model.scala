@@ -87,6 +87,20 @@ object Expression {
       extends Expression
   case class EIf(condition: Expression, ifTrue: Expression, ifFalse: Expression)
       extends Expression
+
+  case class ECase(exp: Expression, matches: List[(Pattern, Expression)])
+      extends Expression
+}
+
+sealed trait Pattern
+object Pattern {
+  case class PPin(expression: Expression)         extends Pattern
+  case class PVar(name: String)                   extends Pattern
+  case class PLiteral(value: Expression.ELiteral) extends Pattern
+  case class PList(values: List[Pattern])         extends Pattern
+  case object PListRest                           extends Pattern
+  case class PTuple(values: List[Pattern])        extends Pattern
+  case class PMap(kvs: List[(Pattern, Pattern)])  extends Pattern
 }
 
 sealed trait ValueType(val literalType: Type.TLiteral)
@@ -296,6 +310,24 @@ object TypedExpression {
       ifFalse: TypedExpression,
       _type: Type
   ) extends TypedExpression
+
+  case class TECase(
+      expr: TypedExpression,
+      cases: List[(TypedPattern, TypedExpression)],
+      _type: Type
+  ) extends TypedExpression
+}
+
+sealed trait TypedPattern
+
+object TypedPattern {
+  case class TPPin(expression: TypedExpression)             extends TypedPattern
+  case class TPVar(name: String)                            extends TypedPattern
+  case class TPLiteral(value: Expression.ELiteral)          extends TypedPattern
+  case class TPList(values: List[TypedPattern])             extends TypedPattern
+  case object TPListRest                                    extends TypedPattern
+  case class TPTuple(values: List[TypedPattern])            extends TypedPattern
+  case class TPMap(kvs: List[(TypedPattern, TypedPattern)]) extends TypedPattern
 }
 
 sealed trait ContextElement {

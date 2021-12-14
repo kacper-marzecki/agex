@@ -1,7 +1,7 @@
 import cats.implicits.*
 import zio.*
 import zio.console.{putStrLn, putStrLnErr}
-import ZIO.{succeed, fail}
+import ZIO.{succeed, fail, foreach, foldLeft, foldRight}
 import AppError.*
 import Type.*
 import Literal.*
@@ -13,7 +13,8 @@ import TypedExpression.*
 import ContextElement.*
 import CompilerState.makeExistential
 import com.softwaremill.quicklens.*
-
+import Pattern.*
+import TypedPattern.*
 def assertLiteralChecksAgainst(
     literal: Literal,
     _type: LiteralType
@@ -27,7 +28,7 @@ def assertLiteralChecksAgainst(
     case (LAtom(_), LTAtom)     => ZIO.unit
     case (LUnit, LTUnit)        => ZIO.unit
     case _ =>
-      ZIO.fail(AppError.TypeNotApplicableToLiteral(TLiteral(_type), literal))
+      fail(AppError.TypeNotApplicableToLiteral(TLiteral(_type), literal))
   }
 }
 
@@ -36,7 +37,7 @@ def assertLiteralChecksAgainst(
     _type: ValueType
 ): Eff[Unit] = {
   val failure: IO[AppError.TypeNotApplicableToLiteral, Nothing] =
-    ZIO.fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
+    fail(AppError.TypeNotApplicableToLiteral(TValue(_type), literal))
   (literal, _type) match {
     case (LAtom(value), VTAtom(valueType)) =>
       if (valueType == value) ZIO.unit else failure
@@ -124,7 +125,7 @@ def checksAgainst(
     case (EList(values), TList(valueType)) => {
       for {
         a <- synthesizesTo(context, values)
-        x <- ZIO.foldRight(values)(
+        x <- foldRight(values)(
           TEAggregation(Nil, context)
         ) { case (expression, result) =>
           for {
@@ -183,7 +184,7 @@ def checksAgainst(
         if values.length == valueTypes.length => {
       for {
         // fold right to avoid appending the typedElement to the result list with O(n)
-        result <- ZIO.foldRight(values.zip(valueTypes))(
+        result <- foldRight(values.zip(valueTypes))(
           TEAggregation(Nil, context)
         ) { case ((expression, _type), result) =>
           for {
@@ -247,19 +248,18 @@ def substitution(
     case it @ TTypeApp(q, args) =>
       for {
         quant <- substitution(context, q, alpha, b)
-        args  <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        args  <- foreach(args)(substitution(context, _, alpha, b))
       } yield TTypeApp(quant, args)
     case TExistential(name) => if (name == alpha) succeed(b) else succeed(a)
     case TTuple(valueTypes) =>
-      ZIO
-        .foreach(valueTypes)(substitution(context, _, alpha, b))
+      foreach(valueTypes)(substitution(context, _, alpha, b))
         .map(TTuple(_))
     case TList(valueType) =>
       substitution(context, valueType, alpha, b)
         .map(TList(_))
     case TFunction(args, ret) =>
       for {
-        argTypes <- ZIO.foreach(args)(substitution(context, _, alpha, b))
+        argTypes <- foreach(args)(substitution(context, _, alpha, b))
         retType  <- substitution(context, ret, alpha, b)
       } yield TFunction(argTypes, retType)
     case TTypeRef(name) =>
@@ -267,34 +267,31 @@ def substitution(
         .getTypeDefinition(name)
         .flatMap(substitution(context, _, alpha, b))
     case TMap(mappings) => {
-      ZIO
-        .foreach(mappings) { it =>
-          it match {
-            case Required(k, v) =>
-              for {
-                substitutedK <- substitution(context, k, alpha, b)
-                substitutedV <- substitution(context, v, alpha, b)
-              } yield Required(substitutedK, substitutedV)
-            case Optional(k, v) =>
-              for {
-                substitutedK <- substitution(context, k, alpha, b)
-                substitutedV <- substitution(context, v, alpha, b)
-              } yield Optional(substitutedK, substitutedV)
-          }
-
+      foreach(mappings) { it =>
+        it match {
+          case Required(k, v) =>
+            for {
+              substitutedK <- substitution(context, k, alpha, b)
+              substitutedV <- substitution(context, v, alpha, b)
+            } yield Required(substitutedK, substitutedV)
+          case Optional(k, v) =>
+            for {
+              substitutedK <- substitution(context, k, alpha, b)
+              substitutedV <- substitution(context, v, alpha, b)
+            } yield Optional(substitutedK, substitutedV)
         }
+
+      }
         .map(TMap(_))
     }
     case TSum(xs) => {
-      ZIO
-        .foreach(xs)(substitution(context, _, alpha, b))
+      foreach(xs)(substitution(context, _, alpha, b))
         .map(TSum.create(_))
     }
     case TStruct(fieldTypes) =>
-      ZIO
-        .foreach(fieldTypes) { case (k, v) =>
-          substitution(context, v, alpha, b).map((k, _))
-        }
+      foreach(fieldTypes) { case (k, v) =>
+        substitution(context, v, alpha, b).map((k, _))
+      }
         .map(TStruct.apply)
   }
 }
@@ -383,7 +380,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             args1.size == args2.size,
             WrongArity(args2.size, args1.size)
           )
-          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+          theta <- foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
               subtype(delta, arg2, arg1)
           }
@@ -391,12 +388,31 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           b     <- applyContext(ret2, theta)
           delta <- subtype(theta, a, b)
         } yield delta
-      case (TMap(kvsA), TMap(kvsB)) => {
-        // firstly, the same subtyping logic as in functions apply
-        ???
+      case (TMap(_), TMap(Nil))           => succeed(context)
+      case (TMap(Nil), TMap(kvB :: kvsB)) => fail(CannotSubtype(context, a, b))
+      case (TMap(mA :: msA), TMap(mB :: msB)) => {
+        def mSubtype(ctx: Context, m1: TMapping, m2: TMapping): Eff[Context] =
+          (m1, m2) match {
+            case (TMapping.Required(k1, v1), TMapping.Required(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+            case (TMapping.Optional(k1, v1), TMapping.Required(k2, v2)) =>
+              fail(CannotSubtype(context, a, b))
+            case (TMapping.Required(k1, v1), TMapping.Optional(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+            case (TMapping.Optional(k1, v1), TMapping.Optional(k2, v2)) =>
+              subtype(ctx, k1, k2).flatMap(subtype(_, v1, v2))
+          }
+        for {
+          delta <- ZIO.foldLeft(mA :: msA)(context) { case (ctx, mapping) =>
+            ZIO.firstSuccessOf(
+              mSubtype(ctx, mapping, mB),
+              msB.map(mSubtype(ctx, mapping, _))
+            )
+          }
+        } yield delta
       }
       case (TSum(xs), sum: TSum) => {
-        ZIO.foldLeft(xs)(context)(subtype(_, _, sum))
+        foldLeft(xs)(context)(subtype(_, _, sum))
         // subtype(context, a, sum).flatMap(subtype(_, b, sum))
       }
       case (t, TSum(xs)) => {
@@ -422,7 +438,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
         if (typesA.size != typesB.size) {
           fail(TupleSizesDontMatch(TTuple(typesA), TTuple(typesB)))
         } else {
-          ZIO.foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
+          foldLeft(typesA.zip(typesB))(context) { case (delta, (a, b)) =>
             subtype(delta, a, b)
           }
         }
@@ -435,7 +451,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
           val commonFields = fieldsB.keys.toList.mapFilter(it =>
             (extractedKeys.included.get(it), fieldsB.get(it)).bisequence
           )
-          ZIO.foldLeft(commonFields)(context) { case (delta, (a, b)) =>
+          foldLeft(commonFields)(context) { case (delta, (a, b)) =>
             subtype(delta, a, b)
           }
         }
@@ -491,7 +507,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
             args1.size == args2.size,
             WrongArity(args2.size, args1.size)
           )
-          theta <- ZIO.foldLeft(args1.zip(args2))(context) {
+          theta <- foldLeft(args1.zip(args2))(context) {
             case (delta, (arg1, arg2)) =>
               subtype(delta, arg1, arg2)
           }
@@ -554,7 +570,7 @@ def applicationSynthesizesTo(
     case TExistential(name) => {
       for {
         retAlpha  <- CompilerState.makeExistential
-        argAlphas <- ZIO.foreach(exprs)(_ => CompilerState.makeExistential)
+        argAlphas <- foreach(exprs)(_ => CompilerState.makeExistential)
         gamma <- context.insertInPlace(
           CExistential(name),
           CExistential(retAlpha) ::
@@ -570,7 +586,7 @@ def applicationSynthesizesTo(
               )
             )
         )
-        result <- ZIO.foldLeft(argAlphas.zip(exprs))(
+        result <- foldLeft(argAlphas.zip(exprs))(
           TEAggregation(Nil, gamma)
         ) { case (result, (alpha1, expr)) =>
           for {
@@ -606,7 +622,7 @@ def applicationSynthesizesTo(
           argTypes.size == exprs.size,
           WrongArity(argTypes.size, exprs.size)
         )
-        res <- ZIO.foldLeft(exprs.zip(argTypes))(TEAggregation(Nil, context)) {
+        res <- foldLeft(exprs.zip(argTypes))(TEAggregation(Nil, context)) {
           case (acc, (arg, argType)) =>
             for {
               (typed, delta) <- checksAgainst(acc.context, arg, argType)
@@ -625,7 +641,7 @@ def synthesizesTo(
     exprs: Iterable[Expression]
 ): Eff[TEAggregation] =
   // fold right to avoid appending the typedElement to the result list with O(n)
-  ZIO.foldRight(exprs)(TEAggregation(Nil, context)) { (elem, result) =>
+  foldRight(exprs)(TEAggregation(Nil, context)) { (elem, result) =>
     for {
       (elemTyped, gamma) <- synthesizesTo(result.context, elem)
     } yield TEAggregation(elemTyped :: result.typed, gamma)
@@ -652,7 +668,7 @@ def synthesizesTo(
     case EVariable(name) => {
       context
         .getAnnotation(name)
-        .fold(ZIO.fail(AnnotationNotFound(context, name)))(annotation =>
+        .fold(fail(AnnotationNotFound(context, name)))(annotation =>
           succeed((TEVariable(name, annotation), context))
         )
     }
@@ -682,11 +698,10 @@ def synthesizesTo(
     //→I⇒
     case EFunction(args, ret) => {
       for {
-        (sigmas, sigmaVariables) <- ZIO
-          .foreach(args)(arg =>
-            CompilerState.makeExistential
-              .map(sigma => (sigma, CTypedVariable(arg, TExistential(sigma))))
-          )
+        (sigmas, sigmaVariables) <- foreach(args)(arg =>
+          CompilerState.makeExistential
+            .map(sigma => (sigma, CTypedVariable(arg, TExistential(sigma))))
+        )
           .map(it => split(it))
         tau <- CompilerState.makeExistential
         gamma <- context.addAll(
@@ -776,8 +791,128 @@ def synthesizesTo(
         delta
       )
     }
+
+    case ECase(expr, matches) => {
+      for {
+        (exprTyped, delta) <- synthesizesTo(context, expr)
+        patternsAndBranches <- foreach(matches) { case (m, e) =>
+          for {
+            (typedPattern, bindings, t) <- getMatch(context, exprTyped._type, m)
+            ctxWithNames <- foldLeft(bindings.toList)(context) {
+              case (ctx, (name, t)) => ctx.add(CTypedVariable(name, t))
+            }
+            (branchTyped, theta) <- synthesizesTo(ctxWithNames, e)
+          } yield (typedPattern, branchTyped)
+        }
+        t = TSum.create(patternsAndBranches.map { case (_, typedBranch) =>
+          typedBranch._type
+        }.toSet)
+        // for each match check if inferred type from pattern checks against the cased expression
+        // extract Match VAR types ? how ??  bind them in context for their expressions
+        // collect typed expressions
+      } yield (
+        TECase(exprTyped, patternsAndBranches, t),
+        delta
+      )
+    }
   }
 }.mapError(e => AppError.CompilationError(expr, e))
+
+// returns var bindings
+def getMatch(
+    ctx: Context,
+    exprType: Type,
+    pattern: Pattern
+): Eff[(TypedPattern, Map[String, Type], Type)] = {
+  (pattern, exprType) match {
+    case (PPin(expression), t) =>
+      for {
+        (pinExprTyped, _) <- synthesizesTo(ctx, expression)
+        _                 <- subtype(ctx, pinExprTyped._type, exprType)
+      } yield (TPPin(pinExprTyped), Map(), exprType)
+    case (PVar(name), t) =>
+      succeed((TPVar(name), Map(name -> t), t))
+    case (PLiteral(value), t) =>
+      checksAgainst(ctx, value, t).map { case (typed, ctx) =>
+        (TPLiteral(value), Map(), t)
+      }
+    case (PList(values), TList(listType)) =>
+      for {
+        (bindings, tPatterns) <- foldLeft(values.filter(_ != PListRest))(
+          (Map[String, Type](), List[TypedPattern]())
+        ) { case ((acc, tPatterns), v) =>
+          for {
+            (tPattern, m, t) <- getMatch(ctx, listType, v)
+          } yield (acc ++ m, tPatterns.appended(tPattern))
+        }
+      } yield (TPList(tPatterns), bindings, TList(listType))
+    case (PListRest, _) =>
+      fail(AppError.Unexpected("should not happen, invalid state"))
+    // if (exprType)
+    case (PTuple(values), TTuple(valueTypes)) =>
+      for {
+        _ <- assertTrue(
+          values.length == valueTypes.length,
+          AppError.PatternDoesntMatch(pattern, exprType)
+        )
+        (patterns, map, types) <- foldLeft(values.zip(valueTypes))(
+          (List[TypedPattern](), Map[String, Type](), List[Type]())
+        ) { case ((patterns, typeMap, types), (p, t)) =>
+          getMatch(ctx, t, p).map { case (tPattern, rTypeMap, rType) =>
+            (
+              patterns.appended(tPattern),
+              typeMap ++ rTypeMap,
+              types.appended(t)
+            )
+          }
+        }
+      } yield (TPTuple(patterns), map, TTuple(types))
+    case (PMap(kvsp), TMap(kvs)) =>
+      for {
+        _ <- assertTrue(
+          kvsp.collect { case (x: PVar, _) => x }.isEmpty,
+          AppError.InvalidPattern("Can only use literals in map key patterns")
+        )
+        patternsAndBindings <- foreach(kvsp) { (kPattern, vPattern) =>
+          for {
+            keyResults <- ZIO.foreach(kvs)(kv =>
+              ZIO
+                .tupled(
+                  getMatch(ctx, kv.k, kPattern),
+                  getMatch(ctx, kv.v, vPattern)
+                )
+                .either
+            )
+            successes = keyResults.collect { case Right(x) => x }
+            result <-
+              if (successes.isEmpty)
+                fail(AppError.PatternDoesntMatch(pattern, exprType))
+              else {
+                val bindings = successes.foldLeft(Map[String, Type]()) {
+                  case (acc, ((tp1, b1, _), (tp2, b2, _))) => acc ++ b1 ++ b2
+                }
+                val patternPair = successes.map {
+                  case ((tp1, b1, _), (tp2, b2, _)) => (tp1, tp2)
+                }.head
+                succeed((patternPair, bindings))
+              }
+          } yield result
+        }
+
+        // get key pattern
+        // for each mapping,  getMatch for key and value type, collect results where both key and value match
+        // we then get a List[(TypedPattern, Map[String, Type], Type), (TypedPattern, Map[String, Type], Type)]
+        // pick a hd of (TypedPattern, TypePattern) -> this will be the typed pattern pair for the mapping
+        // if the list is not empty it means at least one pattern matches the key type
+        // combine bindings
+        bindings = patternsAndBindings.foldLeft(Map[String, Type]()) {
+          case (acc, (_, b)) => acc ++ b
+        }
+        patterns = patternsAndBindings.map { case (p, b) => p }
+      } yield (TPMap(patterns), bindings, exprType)
+    case _ => fail(AppError.PatternDoesntMatch(pattern, exprType))
+  }
+}
 
 def synth(
     expr: Expression,
