@@ -12,13 +12,7 @@
                 (case input
                   ((^ lucky_string) {:ok lucky_number})
                   (other {:error (error_fn input)}))))
-  (deftype user_request %{
-    "username" string
-    "lastname" string
-
-    "age" number
-    string any 
-  })
+  
   (defn match_map
     ([] (| 1 2))
      []  (let [ map %{:value 1 

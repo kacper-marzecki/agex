@@ -295,27 +295,27 @@ object Sexp {
       case SList(pattern :: expression :: Nil) =>
         for {
           e <- toAst(expression)
-          m <- parsPattern(pattern)
+          m <- parsePattern(pattern)
         } yield (m, e)
       case other =>
         failWith("structure of a case match:  `(pattern expression)`")
     }
   }
 
-  def parsPattern(p: SExp, inList: Boolean = false): Eff[Pattern] =
+  def parsePattern(p: SExp, inList: Boolean = false): Eff[Pattern] =
     p match {
       case SList(List(SId("^"), sexp)) => toAst(sexp).map(PPin(_))
       case SId("..") if inList         => succeed(PListRest)
       case SString(s)     => succeed(PLiteral(ELiteral(LString(s))))
-      case SCurlyList(xs) => foreach(xs)(parsPattern(_, false)).map(PTuple(_))
+      case SCurlyList(xs) => foreach(xs)(parsePattern(_, false)).map(PTuple(_))
       case SId(s) =>
         parseId(s).flatMap {
           case EVariable(v)    => succeed(PVar(v))
           case other: ELiteral => succeed(PLiteral(other))
-          case other => failWith(s"invalid pattern expression: $other")
+          // case other => failWith(s"invalid pattern expression: $other")
         }
       case SList(xs) =>
-        foreach(xs)(parsPattern(_, true)).flatMap { elems =>
+        foreach(xs)(parsePattern(_, true)).flatMap { elems =>
           if (elems.reverse.tail.contains(PListRest)) {
             failWith("cannot use rest pattern in the middle of the list")
           } else
@@ -323,7 +323,7 @@ object Sexp {
         }
       case SMapLiteral(xs) =>
         for {
-          elems <- foreach(xs)(parsPattern(_, false))
+          elems <- foreach(xs)(parsePattern(_, false))
           s <- foreach(elems.sliding(2, 2).toList) {
             case one :: two :: Nil =>
               one match {
