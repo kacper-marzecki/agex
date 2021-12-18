@@ -28,7 +28,7 @@
       ([string] (fn [string] (| :other_error :unfortunate_error)))
       [unlucky_string] 
         (fn [str]
-          (if (= str unlucky_string) 
+          (if (== str unlucky_string) 
                               :unfortunate_error 
                               :other_error))))
 

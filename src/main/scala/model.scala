@@ -22,7 +22,8 @@ case class ElixirModule(
 case class ElixirFunction(
     name: String,
     _type: Type,
-    targetFunction: String
+    targetFunction: String,
+    infix: Boolean = false
 ) extends ElixirModuleStatement
 case class ElixirTypeDef(name: String, _type: Type)
     extends ElixirModuleStatement
@@ -58,7 +59,8 @@ object TypedStatement {
   case class FunctionDef(
       name: String,
       args: List[String],
-      body: TypedExpression
+      body: TypedExpression,
+      _type: Type.TFunction
   ) extends TypedStatement
   case class ModuleAttribute(name: String, body: TypedExpression)
       extends TypedStatement
@@ -264,8 +266,13 @@ sealed trait TypedExpression {
   def _type: Type
 }
 object TypedExpression {
-  case class TEVariable(name: String, _type: Type) extends TypedExpression
-  case class TELiteral(it: Literal, _type: Type)   extends TypedExpression
+  case class TEVariable(
+      name: String,
+      _type: Type,
+      isLocal: Boolean = true,
+      infix: Boolean = false
+  )                                              extends TypedExpression
+  case class TELiteral(it: Literal, _type: Type) extends TypedExpression
   case class TEAny(expression: TypedExpression, _type: Type = TAny)
       extends TypedExpression
   case class TELet(
@@ -334,10 +341,15 @@ sealed trait ContextElement {
   def name: String
 }
 object ContextElement {
-  case class CVariable(name: String)                    extends ContextElement
-  case class CExistential(name: String)                 extends ContextElement
-  case class CSolved(name: String, _type: Type)         extends ContextElement
-  case class CTypedVariable(name: String, _type: Type)  extends ContextElement
+  case class CVariable(name: String)            extends ContextElement
+  case class CExistential(name: String)         extends ContextElement
+  case class CSolved(name: String, _type: Type) extends ContextElement
+  case class CTypedVariable(
+      name: String,
+      _type: Type,
+      isLocal: Boolean = true,
+      infix: Boolean = false
+  )                                                     extends ContextElement
   case class CMarker(name: String)                      extends ContextElement
   case class CTypeDefinition(name: String, _type: Type) extends ContextElement
 }

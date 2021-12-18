@@ -135,6 +135,25 @@ object Sexp {
           _type,
           elixirFunctionName
         )
+      case SList(
+            SId("definfix") :: SId(functionName) :: SList(
+              List(SSquareList(argTypes), returnType)
+            ) :: SString(elixirFunctionName) :: Nil
+          ) =>
+        for {
+          _ <-
+            if (argTypes.length != 2)
+              failWith("Infix function can only have 2 arguments")
+            else ZIO.unit
+          _type <- parseType(
+            SList(List(SId("fn"), SSquareList(argTypes), returnType))
+          )
+        } yield ElixirFunction(
+          functionName,
+          _type,
+          elixirFunctionName,
+          infix = true
+        )
       case SList(SId("deftype") :: SId(name) :: _type :: Nil) =>
         parseType(_type).map(ElixirTypeDef(name, _))
       case _ =>
