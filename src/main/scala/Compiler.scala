@@ -44,6 +44,8 @@ object Compiler {
         .tapError(pPrint(_, "ASD"))
     } yield modules
 }
+import java.nio.file.{Paths, Files}
+import java.nio.charset.StandardCharsets
 
 class Compiler(
     listFiles: (path: String) => Eff[List[String]],
@@ -101,9 +103,22 @@ class Compiler(
         defaultContextWithCoreModules
       )
       _ <- pPrint(typedModules, "TYPED MODULES")
-      _ <- ZIO.foreach(typedModules.map(ElixirOutput.toElixir))(
-        pPrint(_, "MODULE")
-      )
+      _ <- ZIO.foreach(typedModules) { module =>
+        val moduleString = ElixirOutput.toElixir(module)
+        // pPrint(module, "MODULE") *>
+        ZIO {
+          Files.write(
+            Paths.get(
+              s"output/lib/agex/${module.name.toLowerCase.replace(".", "_")}.ex"
+            ),
+            moduleString.getBytes(StandardCharsets.UTF_8)
+          )
+        }.mapError(AppError.UnknownError(_))
+      }
+      _ <- ZIO {
+        import scala.sys.process.*
+        val output = "mix format output/lib/agex/*".!!
+      }.mapError(AppError.UnknownError(_))
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
@@ -146,16 +161,19 @@ class Compiler(
                         ).map {
                           case (
                                 gamma,
-                                TEAnnotation(TEFunction(_, typed, _), _, _)
+                                TEAnnotation(
+                                  TEFunction(_, typed, _),
+                                  TFunction(argTypes, retType),
+                                  _
+                                )
                               ) =>
-                            println("statement._type")
-                            println(statement._type)
                             List(
                               TypedStatement
                                 .FunctionDef(
                                   statement.name,
                                   statement.args,
-                                  typed
+                                  typed,
+                                  TFunction(argTypes, retType)
                                 )
                             )
                           case _ => ???

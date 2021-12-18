@@ -59,7 +59,9 @@ object Module {
       case member: ElixirFunction =>
         ContextElement.CTypedVariable(
           s"${prefixFn(eModule)}${member.name}",
-          member._type
+          member._type,
+          false,
+          member.infix
         )
       case member: ElixirTypeDef =>
         ContextElement.CTypeDefinition(
@@ -79,7 +81,8 @@ object Module {
       case member: FunctionDef =>
         ContextElement.CTypedVariable(
           s"${prefixFn(module)}${member.name}",
-          member._type
+          member._type,
+          false
         )
       case member: TypeDef =>
         ContextElement.CTypeDefinition(

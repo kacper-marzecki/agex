@@ -82,7 +82,10 @@ def checksAgainst(
     }
     //Decl→I
     case (EFunction(args, body), TFunction(argTypes, bodyType)) => {
-      val typedVars = args.zip(argTypes).map(CTypedVariable.apply.tupled)
+      val typedVars =
+        args.zip(argTypes).map { case (name, _type) =>
+          CTypedVariable(name, _type)
+        }
       for {
         _ <- assertTrue(
           args.size == argTypes.size,
@@ -668,9 +671,10 @@ def synthesizesTo(
     case EVariable(name) => {
       context
         .getAnnotation(name)
-        .fold(fail(AnnotationNotFound(context, name)))(annotation =>
-          succeed((TEVariable(name, annotation), context))
-        )
+        .fold(fail(AnnotationNotFound(context, name))) {
+          case (annotation, isLocal, infix) =>
+            succeed((TEVariable(name, annotation, isLocal, infix), context))
+        }
     }
     //Anno
     case EAnnotation(expression, annType) => {

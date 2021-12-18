@@ -7,7 +7,7 @@ object ElixirOutput {
   def toElixir(it: Literal): String = {
     it match {
       case LChar(it: Char)     => it.toString
-      case LString(it: String) => it
+      case LString(it: String) => s"\"$it\"" 
       case LInt(it: Int)       => it.toString
       case LFloat(it: Float)   => it.toString
       case LBool(it: Boolean)  => it.toString
@@ -19,7 +19,7 @@ object ElixirOutput {
 
   def toElixir(expr: TypedExpression): String = {
     expr match {
-      case TEVariable(name, _type) => name
+      case TEVariable(name, _type, isLocal, infix) => name
       case TELiteral(it, _type)    => toElixir(it)
       // Why does it exist ?
       case TEAny(expression: TypedExpression, _type: Type) =>
@@ -45,7 +45,15 @@ object ElixirOutput {
         val argumentList = if (args.isEmpty) "" else s"(${args.mkString(", ")})"
         s"fn ${argumentList} -> ${toElixir(body)} end"
       case TEFunctionApplication(fun, args, _type) =>
-        s"apply(${toElixir(fun)}, [${args.map(toElixir).mkString(", ")}])"
+        fun match {
+          case TEVariable(name, _type, isLocal, infix) if isLocal => 
+             s"$name.(${args.map(toElixir).mkString(", ")})"
+          case TEVariable(name, _type, isLocal, infix) if !isLocal && !infix => 
+             s"$name(${args.map(toElixir).mkString(", ")})" 
+          case TEVariable(name, _type, isLocal, infix) if !isLocal && infix => 
+             s"${toElixir(args(0))}  $name ${toElixir(args(1))}" 
+          case other => s"apply(${toElixir(other)}, [${args.map(toElixir).mkString(", ")}])"
+        }
       case TEIf(condition, ifTrue, ifFalse, _type) =>
         s"""if ${toElixir(condition)} do
             ${toElixir(ifTrue)} 
@@ -78,7 +86,7 @@ object ElixirOutput {
     case TPTuple(values) =>
       s"{${values.map(toElixir).mkString(", ")}}"
     case TPMap(kvs: List[(TypedPattern, TypedPattern)]) =>
-      "%{" + kvs
+      "%{\n" + kvs
         .map { case (k, v) => s"${toElixir(k)} => ${toElixir(v)}" }
         .mkString(", ") + "}"
 
@@ -86,25 +94,27 @@ object ElixirOutput {
 
   def toElixir(it: FunctionDef): String = {
     s"""
-    def ${it.name}(${it.args.mkString(", ")}) do 
-      ${toElixir(it.body)}
-    end 
-    """
+    | def ${it.name}(${it.args.mkString(", ")}) do 
+    |  ${toElixir(it.body)}
+    |end 
+    """.stripMargin
   }
   def toElixir(it: ModuleAttribute): String = {
     s"@${it.name} ${toElixir(it.body)}"
   }
 
   def toElixir(module: TypedModule): String = {
-    val aliases = module.aliases.map(a => s"alias $a\n")
-    val statements = module.statements.map {
-      case it: FunctionDef     => toElixir(it)
-      case it: ModuleAttribute => toElixir(it)
-    }
+    val aliases = module.aliases.map(a => s"alias $a\n").mkString("\n")
+    val statements = module.statements
+      .map {
+        case it: FunctionDef     => toElixir(it)
+        case it: ModuleAttribute => toElixir(it)
+      }
+      .mkString("\n")
     s"""
     defmodule ${module.name} do
     $aliases
-
+    $statements
     end
     """
   }

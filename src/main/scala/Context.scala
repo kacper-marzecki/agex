@@ -115,12 +115,12 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def hasVariable(name: String): Boolean =
     elements.contains(CVariable(name))
 
-  def getAnnotation(name: String): Option[Type] =
+  def getAnnotation(name: String): Option[(Type, Boolean, Boolean)] =
     elements.mapFilter {
-      case CTypedVariable(name1, _type) if name == name1 =>
-        Some(_type)
+      case CTypedVariable(name1, _type, isLocal, infix) if name == name1 =>
+        Some(_type, isLocal, infix)
       case CTypeDefinition(name1, _type) if name == name1 =>
-        Some(_type)
+        Some(_type, false, false)
       case _ => None
     }.headOption
 }

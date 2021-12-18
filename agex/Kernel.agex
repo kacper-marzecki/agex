@@ -1,3 +1,3 @@
 (defelixir Kernel 
   (def + ([integer integer] integer) "Kernel.+" )
-  (def = ([any any] boolean) "Kernel.==" ))
+  (definfix == ([any any] boolean) "Kernel.==" ))
