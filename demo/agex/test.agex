@@ -4,7 +4,7 @@
          App.ErrorChecker)  
 
   (defn parse 
-    ([string] (Types.Result integer Types.Errors))
+    ([string] (Types.Result Types.Errors integer))
      [input]  (let [error_fn (ErrorChecker.unfortunate_error_checker "13") 
                     lucky_string "42"
                     a %{1 2 3 4}
@@ -13,8 +13,9 @@
                   ((^ lucky_string) {:ok lucky_number})
                   (other {:error (error_fn input)}))))
   
-  (defn match_map
-    ([] (| 1 2))
+
+    (defn match_map
+    ([] (| 1 2 3)) 
      []  (let [ map %{:value 1 
                     :nested_map %{ 1 "one" 
                                   "string_key" {:tuple_elem 2}}}] 
@@ -24,6 +25,7 @@
 )
 
 (defmodule App.ErrorChecker
+
   (defn unfortunate_error_checker 
       ([string] (fn [string] (| :other_error :unfortunate_error)))
       [unlucky_string] 
@@ -35,10 +37,11 @@
 (defmodule App.Example.Types
   (alias App.Example.Types)
   (deftype Result  
-    (forall [a b] 
-      (| {:ok a}
-         {:error b})))
+    (forall [err suc] 
+      (| {:ok suc}
+         {:error err})))
   (deftype Errors (| :unfortunate_error 
+                     :other_error 
                      :other_error 
                      :yet_another_error )))
 

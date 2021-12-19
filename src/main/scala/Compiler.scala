@@ -9,25 +9,71 @@ import TypedExpression.*
 import Type.*
 import scala.annotation.meta.field
 import Pattern.*
+import java.nio.file.{Paths, Files, StandardOpenOption}
+import java.nio.charset.StandardCharsets
+
+import java.io.*
+
+/** write a `String` to the `filename`.
+  */
+def writeFile(filename: String, s: String): Eff[Unit] = ZIO {
+  val file = new File(filename)
+  file.getParentFile().mkdirs()
+  println("after file")
+  val bw = new BufferedWriter(new FileWriter(file))
+  println("after bw")
+  bw.write(s)
+  println("after write")
+  bw.close()
+  println("after close")
+
+}.mapError(AppError.UnknownError(_))
+
 case class ModuleDependencies(
     module: AgexModule,
     dependencies: List[String]
 )
 
 object Compiler {
-  val stubCompiler = new Compiler(
-    _ =>
-      ZIO.succeed(
-        List("asd")
-      ),
-    _ =>
+  import java.io.File
+  def recursiveListFiles(f: File): Array[File] = {
+    val these = f.listFiles
+    these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
+  }
+  def liveCompiler(inputDir: String, outputDir: String) = new Compiler(
+    listFiles = ZIO {
+      recursiveListFiles(File(inputDir))
+        .filterNot(_.isDirectory)
+        .map(_.getAbsolutePath)
+        .toList
+    }
+      .mapError(AppError.UnknownError(_)),
+    getFile = path =>
       ZIO(
         scala.io.Source
-          .fromFile("test.agex")
+          .fromFile(path)
           .getLines
           .toList
           .foldSmash("", "\n", "")
-      ).mapError(AppError.UnknownError(_))
+      ).mapError(AppError.UnknownError(_)),
+    writeFile = (content, fileName) =>
+      writeFile(s"$outputDir/${fileName}", content)
+  )
+
+  val stubCompiler = new Compiler(
+    listFiles = ZIO.succeed(
+      List("asd")
+    ),
+    getFile = _ =>
+      ZIO(
+        scala.io.Source
+          .fromFile("demo/agex/test.agex")
+          .getLines
+          .toList
+          .foldSmash("", "\n", "")
+      ).mapError(AppError.UnknownError(_)),
+    writeFile = (content, fileName) =>
+      writeFile(s"demo/lib/agex/${fileName}", content)
   )
   def fileToModule(
       fileContent: String
@@ -44,21 +90,29 @@ object Compiler {
         .tapError(pPrint(_, "ASD"))
     } yield modules
 }
-import java.nio.file.{Paths, Files}
-import java.nio.charset.StandardCharsets
 
 class Compiler(
-    listFiles: (path: String) => Eff[List[String]],
-    getFile: (path: String) => Eff[String]
+    listFiles: Eff[List[String]],
+    getFile: (path: String) => Eff[String],
+    writeFile: (fileName: String, fileContent: String) => Eff[Unit]
 ) {
   import Compiler.*
-  val loadAgexCoreFiles = loadFilesInDirectory("agex")
-  def compile(filePath: String): Eff[Unit] = {
+  val loadAgexCoreFiles = ZIO {
+    val coreFiles = List("Kernel.agex")
+    coreFiles.map { it =>
+      val stream: InputStream = getClass.getResourceAsStream(it)
+      scala.io.Source.fromInputStream(stream).getLines.mkString("\n")
+    }
+  }.mapError(AppError.UnknownError(_))
+
+  def compile: Eff[Unit] = {
     for {
-      files           <- listFiles(filePath).flatMap(ZIO.foreach(_)(getFile))
-      agesCoreFiles   <- loadAgexCoreFiles
-      modules         <- (files ++ agesCoreFiles).foldMapM(fileToModule)
-      agexCoreModules <- agesCoreFiles.foldMapM(fileToModule)
+      files           <- listFiles.flatMap(ZIO.foreach(_)(getFile))
+      agexCoreFiles   <- loadAgexCoreFiles
+      _               <- pPrint(agexCoreFiles, "agexCoreFiles")
+      _               <- pPrint(files, "files")
+      modules         <- (files ++ agexCoreFiles).foldMapM(fileToModule)
+      agexCoreModules <- agexCoreFiles.foldMapM(fileToModule)
       _               <- validateUniqueModules(modules)
       existingModules = modules.map(_.name).toSet
       dependenciesAndModules <- getModuleDependencies(modules, existingModules)
@@ -105,20 +159,11 @@ class Compiler(
       _ <- pPrint(typedModules, "TYPED MODULES")
       _ <- ZIO.foreach(typedModules) { module =>
         val moduleString = ElixirOutput.toElixir(module)
-        // pPrint(module, "MODULE") *>
-        ZIO {
-          Files.write(
-            Paths.get(
-              s"output/lib/agex/${module.name.toLowerCase.replace(".", "_")}.ex"
-            ),
-            moduleString.getBytes(StandardCharsets.UTF_8)
-          )
-        }.mapError(AppError.UnknownError(_))
+        writeFile(
+          moduleString,
+          s"${module.name.toLowerCase.replace(".", "_")}.ex"
+        )
       }
-      _ <- ZIO {
-        import scala.sys.process.*
-        val output = "mix format output/lib/agex/*".!!
-      }.mapError(AppError.UnknownError(_))
     } yield ()
   }.tapError(pPrint(_, "COMPILE ERROR"))
 
@@ -162,11 +207,22 @@ class Compiler(
                           case (
                                 gamma,
                                 TEAnnotation(
-                                  TEFunction(_, typed, _),
+                                  TEFunction(a, typed, b),
                                   TFunction(argTypes, retType),
-                                  _
+                                  c
                                 )
                               ) =>
+                            println("KEK")
+                            println(s"a")
+                            println(s"$a")
+                            println(s"b")
+                            println(s"$b")
+                            println(s"c")
+                            println(s"$c")
+                            println(s"typed")
+                            println(s"$typed")
+                            println(s"argTypes")
+                            println(s"$argTypes")
                             List(
                               TypedStatement
                                 .FunctionDef(
@@ -212,7 +268,8 @@ class Compiler(
       }
       .toList
     if (duplicateModules.nonEmpty) {
-      ZIO.fail(AppError.MultipleModuleDefinition(duplicateModules))
+      pPrint(modules.map(_.name), "MODULES") *>
+        ZIO.fail(AppError.MultipleModuleDefinition(duplicateModules))
     } else {
       ZIO.unit
     }

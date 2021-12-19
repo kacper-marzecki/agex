@@ -1,0 +1,24 @@
+(defmodule App.State.Transition 
+  (alias App.Example.Types)
+  (deftype Data string)
+  (deftype Result integer)
+  (deftype State (| :new  {:in_progress Data} :cancelled {:finished Result} ))
+  (deftype Command (| {:start Data} :cancel {:finish Result} ))
+ 
+  (defn transition 
+    ([State Command] (Types.Result {:invalid_transition State Command} State))
+    [state command] 
+      (case {state command}
+        ({:new {:start data}} {:ok {:in_progress data}})
+        ({{:in_progress _} :cancel} {:ok :cancelled})
+        ({{:in_progress _} {:finish result}} {:ok {:finished result}})
+        ({state command} {:error {:invalid_transition state command}})
+      ))
+)
+
+;; (defmodule App.State.TransitionTest
+;;  (alias App.State.Transition)
+;;  (defn test 
+;;    ([] ())
+;;    [] (Transition.transition :new {:in_progress "asd"}))
+;;)
