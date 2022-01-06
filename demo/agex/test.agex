@@ -41,8 +41,5 @@
          {:error err})))
   (deftype Errors (| :unfortunate_error 
                      :other_error 
-                     :other_error 
                      :yet_another_error )))
-
-
 

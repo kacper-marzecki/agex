@@ -543,8 +543,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       //     )
       // TODO: no subtyping Sum types
       case it => {
-        pPrint(it, "#############") *>
-          fail(CannotSubtype(context, a, b))
+        fail(CannotSubtype(context, a, b))
       }
     }
   } yield delta
@@ -872,7 +871,11 @@ def getMatch(
         }
       } yield (TPTuple(patterns), map, TTuple(types))
     case (pattern, TSum(types)) => {
-      findM(types, t => getMatch(ctx, t, pattern), AppError.PatternDoesntMatch(pattern, exprType))
+      findM(
+        types,
+        t => getMatch(ctx, t, pattern),
+        AppError.PatternDoesntMatch(pattern, exprType)
+      )
     }
     case (PMap(kvsp), TMap(kvs)) =>
       for {
@@ -918,8 +921,7 @@ def getMatch(
         patterns = patternsAndBindings.map { case (p, b) => p }
       } yield (TPMap(patterns), bindings, exprType)
     case _ =>
-      pPrint(null, "NO PATTERN MATCHED") *>
-        fail(AppError.PatternDoesntMatch(pattern, exprType))
+      fail(AppError.PatternDoesntMatch(pattern, exprType))
   }
 }
 

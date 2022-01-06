@@ -20,13 +20,9 @@ import java.io.*
 def writeFile(filename: String, s: String): Eff[Unit] = ZIO {
   val file = new File(filename)
   file.getParentFile().mkdirs()
-  println("after file")
   val bw = new BufferedWriter(new FileWriter(file))
-  println("after bw")
   bw.write(s)
-  println("after write")
   bw.close()
-  println("after close")
 
 }.mapError(AppError.UnknownError(_))
 
@@ -110,8 +106,6 @@ class Compiler(
     for {
       files           <- listFiles.flatMap(ZIO.foreach(_)(getFile))
       agexCoreFiles   <- loadAgexCoreFiles
-      _               <- pPrint(agexCoreFiles, "agexCoreFiles")
-      _               <- pPrint(files, "files")
       modules         <- (files ++ agexCoreFiles).foldMapM(fileToModule)
       agexCoreModules <- agexCoreFiles.foldMapM(fileToModule)
       _               <- validateUniqueModules(modules)
@@ -145,19 +139,11 @@ class Compiler(
       defaultContextWithCoreModules <- ZIO.foldLeft(agexCoreModules)(
         defaultContext
       )(Module.addToLocalContext)
-      // _ <- pPrint(defaultContext, "DEFAULT CONTEXT")
-      // _ <- pPrint(sortedModules, "MODULES")
-
-      // _ <- pPrint(
-      // dependenciesAndModules,
-      // "DEPENDENCIES AND MODULES"
-      // )
       typedModules <- compile(
         sortedModules,
         modules,
         defaultContextWithCoreModules
       )
-      _ <- pPrint(typedModules, "TYPED MODULES")
       _ <- ZIO.foreach(typedModules) { module =>
         val moduleString = ElixirOutput.toElixir(module)
         writeFile(
@@ -188,8 +174,6 @@ class Compiler(
                 aliasedContext <- ZIO.foldLeft(aliasedModules)(s.context)(
                   Module.addToAliasedContext
                 )
-                _ <- pPrint(it, "modele to alias")
-                _ <- pPrint(aliasedContext, "ALIASED CONTEXT")
                 result <- Module
                   .addToLocalContext(aliasedContext, it)
                   .flatMap { c =>
@@ -213,20 +197,7 @@ class Compiler(
                                   c
                                 )
                               ) =>
-                            println("KEK")
-                            println(s"a")
-                            println(s"$a")
-                            println(s"b")
-                            println(s"$b")
-                            println(s"c")
-                            println(s"$c")
-                            println(s"typed")
-                            println(s"$typed")
-                            println(s"argTypes")
-                            println(s"$argTypes")
                             applyContext(TFunction(argTypes, retType), gamma)
-                              .tap(pPrint(_, "ASD"))
-                              .tapError(pPrint(_, "ASD ERROR"))
                               .map { appliedFunctionType =>
                                 List(
                                   TypedStatement
@@ -281,8 +252,7 @@ class Compiler(
       }
       .toList
     if (duplicateModules.nonEmpty) {
-      pPrint(modules.map(_.name), "MODULES") *>
-        ZIO.fail(AppError.MultipleModuleDefinition(duplicateModules))
+      ZIO.fail(AppError.MultipleModuleDefinition(duplicateModules))
     } else {
       ZIO.unit
     }
@@ -324,11 +294,6 @@ class Compiler(
           case it: ElixirTypeDef  => getModuleReferences(it._type)
         }
       }
-    // match aliases with possible references from the aliased modules
-    // (alias Phoenix.Controller
-    //        Ecto.Changeset)
-    // (def ... (Controller.json)
-    // results in [[Phoenix.Controller, Controller]]
     references.map(ref =>
       ref ::
         module.aliases
