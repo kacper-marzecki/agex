@@ -1,5 +1,7 @@
 import Type.TAny
 import scala.collection.concurrent.TNode
+import TMapping.Optional
+import TMapping.Required
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -257,7 +259,36 @@ object Type {
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
       case TSum(xs)             => TSum(xs.map(repl))
-      case other                => other
+      case TList(x)             => TList(repl(x))
+      case TMap(xs) =>
+        TMap(xs.map {
+          case Optional(a, b) => Optional(repl(a), repl(b))
+          case Required(a, b) => Required(repl(a), repl(b))
+        })
+      case other => other
+    }
+  }
+
+  def qualifyLocalRef(
+      moduleName: String,
+      in: Type
+  ): Type = {
+    val repl = qualifyLocalRef(moduleName, _)
+    in match {
+      case TTypeRef(name) if (!name.contains(".")) =>
+        TTypeRef(s"$moduleName.$name")
+      case TTuple(valueTypes)  => TTuple(valueTypes.map(repl))
+      case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
+      case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
+      case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
+      case TSum(xs)             => TSum(xs.map(repl))
+      case TList(x)             => TList(repl(x))
+      case TMap(xs) =>
+        TMap(xs.map {
+          case Optional(a, b) => Optional(repl(a), repl(b))
+          case Required(a, b) => Required(repl(a), repl(b))
+        })
+      case other => other
     }
   }
 }

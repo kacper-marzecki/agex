@@ -11,6 +11,7 @@ import scala.annotation.meta.field
 import Pattern.*
 import java.nio.file.{Paths, Files, StandardOpenOption}
 import java.nio.charset.StandardCharsets
+import com.softwaremill.quicklens.*
 
 import java.io.*
 
@@ -203,7 +204,7 @@ class Compiler(
                             statement._type
                           ),
                           c
-                        ).map {
+                        ).flatMap {
                           case (
                                 gamma,
                                 TEAnnotation(
@@ -223,15 +224,27 @@ class Compiler(
                             println(s"$typed")
                             println(s"argTypes")
                             println(s"$argTypes")
-                            List(
-                              TypedStatement
-                                .FunctionDef(
-                                  statement.name,
-                                  statement.args,
-                                  typed,
-                                  TFunction(argTypes, retType)
+                            applyContext(TFunction(argTypes, retType), gamma)
+                              .tap(pPrint(_, "ASD"))
+                              .tapError(pPrint(_, "ASD ERROR"))
+                              .map { appliedFunctionType =>
+                                List(
+                                  TypedStatement
+                                    .FunctionDef(
+                                      statement.name,
+                                      statement.args,
+                                      typed
+                                        .modify(_._type)
+                                        .setTo(
+                                          appliedFunctionType
+                                            .asInstanceOf[Type.TFunction]
+                                        ),
+                                      appliedFunctionType
+                                        .asInstanceOf[Type.TFunction]
+                                    )
                                 )
-                            )
+                              }
+
                           case _ => ???
                         }
                     }

@@ -59,14 +59,14 @@ object Module {
       case member: ElixirFunction =>
         ContextElement.CTypedVariable(
           s"${prefixFn(eModule)}${member.name}",
-          member._type,
+          qualifyLocalRef(eModule.name, member._type),
           false,
           member.infix
         )
       case member: ElixirTypeDef =>
         ContextElement.CTypeDefinition(
           s"${prefixFn(eModule)}${member.name}",
-          member._type
+          qualifyLocalRef(eModule.name, member._type)
         )
     }
     context.addAll(vars)
@@ -81,13 +81,13 @@ object Module {
       case member: FunctionDef =>
         ContextElement.CTypedVariable(
           s"${prefixFn(module)}${member.name}",
-          member._type,
+          qualifyLocalRef(module.name, member._type),
           false
         )
       case member: TypeDef =>
         ContextElement.CTypeDefinition(
           s"${prefixFn(module)}${member.name}",
-          member._type
+          qualifyLocalRef(module.name, member._type)
         )
     }
     context.addAll(vars)

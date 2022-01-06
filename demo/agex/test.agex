@@ -15,9 +15,9 @@
   
 
     (defn match_map
-    ([] (| 1 2 3)) 
+    ([] (| 1 2)) 
      []  (let [ map %{:value 1 
-                    :nested_map %{ 1 "one" 
+                      :nested_map %{ 1 "one" 
                                   "string_key" {:tuple_elem 2}}}] 
                 (case map
                   (%{:nested_map %{"string_key" {_ x}}} x)
@@ -25,9 +25,9 @@
 )
 
 (defmodule App.ErrorChecker
-
+  (deftype Input string)
   (defn unfortunate_error_checker 
-      ([string] (fn [string] (| :other_error :unfortunate_error)))
+      ([Input] (fn [Input] (| :other_error :unfortunate_error)))
       [unlucky_string] 
         (fn [str]
           (if (== str unlucky_string) 
@@ -35,7 +35,6 @@
                               :other_error))))
 
 (defmodule App.Example.Types
-  (alias App.Example.Types)
   (deftype Result  
     (forall [err suc] 
       (| {:ok suc}
