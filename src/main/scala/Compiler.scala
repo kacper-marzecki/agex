@@ -15,8 +15,6 @@ import com.softwaremill.quicklens.*
 
 import java.io.*
 
-/** write a `String` to the `filename`.
-  */
 def writeFile(filename: String, s: String): Eff[Unit] = ZIO {
   val file = new File(filename)
   file.getParentFile().mkdirs()
