@@ -18,7 +18,7 @@ object CompilerTest extends DefaultRunnableSpec {
   def spec = suite("CompilerTest")(
     testM("test") {
       // val a: Eff[Int] = ZIO.succeed(1)
-      assertM(toZIO(Compiler.stubCompiler.compile("as").as(1)))(equalTo(1))
+      assertM(toZIO(Compiler.stubCompiler.compile.as(1)))(equalTo(1))
       // assertM(toZIO(a))(equalTo(1))
     }
   )

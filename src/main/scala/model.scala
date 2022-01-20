@@ -1,5 +1,7 @@
 import Type.TAny
 import scala.collection.concurrent.TNode
+import TMapping.Optional
+import TMapping.Required
 sealed trait Literal
 object Literal {
   case class LChar(it: Char)     extends Literal
@@ -153,28 +155,6 @@ sealed trait Type {
         args.forall(_.isMonotype) && ret.isMonotype
       case _ => true
     }
-
-  // def mapLeafs(f: PartialFunction[Type, Type]): Type =
-  //   val map = (t: Type) => PartialFunction.condOpt(t)(f).getOrElse(t)
-  //   this match {
-  //     case it: TValue       => map(it)
-  //     case it: TLiteral     => map(it)
-  //     case it: TVariable    => map(it)
-  //     case TAny             => map(it)
-  //     case TNothing         => map(it)
-  //     case TList(types)     => types.map(map)
-  //     case it: TExistential => map(it)
-  //     case TFunction(argTypes, returnType) =>
-  //       TFunction(argTypes.map(map), map(returnType))
-  //     case TQuantification(name, quantType)     => TQuantification(name, map())
-  //     case TMulQuantification(names, quantType) => ???
-  //     case TSum(x, y)                           => ???
-  //     case TTypeApp(quant, args)                => ???
-  //     case TTuple(valueTypes)                   => ???
-  //     case TTypeRef(name)                       => ???
-  //     case TStruct(fieldTypes)                  => ???
-  //     case TMap(mappings)                       => ???
-  //   }
 }
 
 sealed trait TMapping {
@@ -257,7 +237,36 @@ object Type {
       case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
       case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
       case TSum(xs)             => TSum(xs.map(repl))
-      case other                => other
+      case TList(x)             => TList(repl(x))
+      case TMap(xs) =>
+        TMap(xs.map {
+          case Optional(a, b) => Optional(repl(a), repl(b))
+          case Required(a, b) => Required(repl(a), repl(b))
+        })
+      case other => other
+    }
+  }
+
+  def qualifyLocalRef(
+      moduleName: String,
+      in: Type
+  ): Type = {
+    val repl = qualifyLocalRef(moduleName, _)
+    in match {
+      case TTypeRef(name) if (!name.contains(".")) =>
+        TTypeRef(s"$moduleName.$name")
+      case TTuple(valueTypes)  => TTuple(valueTypes.map(repl))
+      case TStruct(fieldTypes) => TStruct(fieldTypes.view.mapValues(repl).toMap)
+      case TFunction(args, ret) => TFunction(args.map(repl), repl(ret))
+      case TTypeApp(typ, args)  => TTypeApp(repl(typ), args.map(repl))
+      case TSum(xs)             => TSum(xs.map(repl))
+      case TList(x)             => TList(repl(x))
+      case TMap(xs) =>
+        TMap(xs.map {
+          case Optional(a, b) => Optional(repl(a), repl(b))
+          case Required(a, b) => Required(repl(a), repl(b))
+        })
+      case other => other
     }
   }
 }

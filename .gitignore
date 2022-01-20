@@ -8,3 +8,5 @@ target
 out
 .idea
 scratch
+.clj-kondo
+.lsp

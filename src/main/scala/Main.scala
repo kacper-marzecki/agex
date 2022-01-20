@@ -543,8 +543,7 @@ def subtype(context: Context, a: Type, b: Type): Eff[Context] =
       //     )
       // TODO: no subtyping Sum types
       case it => {
-        pPrint(it, "#############") *>
-          fail(CannotSubtype(context, a, b))
+        fail(CannotSubtype(context, a, b))
       }
     }
   } yield delta
@@ -871,6 +870,13 @@ def getMatch(
           }
         }
       } yield (TPTuple(patterns), map, TTuple(types))
+    case (pattern, TSum(types)) => {
+      findM(
+        types,
+        t => getMatch(ctx, t, pattern),
+        AppError.PatternDoesntMatch(pattern, exprType)
+      )
+    }
     case (PMap(kvsp), TMap(kvs)) =>
       for {
         _ <- assertTrue(
@@ -914,7 +920,8 @@ def getMatch(
         }
         patterns = patternsAndBindings.map { case (p, b) => p }
       } yield (TPMap(patterns), bindings, exprType)
-    case _ => fail(AppError.PatternDoesntMatch(pattern, exprType))
+    case _ =>
+      fail(AppError.PatternDoesntMatch(pattern, exprType))
   }
 }
 
@@ -931,6 +938,20 @@ def synth(
 }
 
 object App extends zio.App {
-  def run(args: List[String]): zio.URIO[zio.ZEnv, zio.ExitCode] =
-    putStrLn("Nothing yet").exitCode
+  def run(args: List[String]): zio.URIO[zio.ZEnv, zio.ExitCode] = {
+    for {
+      inputDir <- ZIO
+        .fromOption(args.get(0))
+        .mapError(_ => new RuntimeException("No input dir"))
+      outputDir <- ZIO
+        .fromOption(args.get(1))
+        .mapError(_ => new RuntimeException("No output dir"))
+      _ <- putStrLn(s"inputDir: $inputDir")
+      _ <- putStrLn(s"outputDir: $outputDir")
+      _ <- Compiler
+        .liveCompiler(inputDir, outputDir)
+        .compile
+        .provideSomeLayer[zio.ZEnv](CompilerState.live)
+    } yield ()
+  }.exitCode
 }
