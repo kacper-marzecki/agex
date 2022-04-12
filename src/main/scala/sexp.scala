@@ -1,26 +1,27 @@
-import Expression.*
-import Literal.*
-import cats.parse.{Parser0 as P0, Parser as P, Numbers}
+import Expression._
+import Literal._
+import cats.parse.{Parser0 => P0, Parser => P, Numbers}
 import cats.data.NonEmptyList
-import cats.implicits.*
-import scala.runtime.stdLibPatches.language.experimental.namedTypeArguments
+import cats.implicits._
 import cats.Eval
-import cats.implicits.*
-import ValueType.*
-import Type.*
+import cats.implicits._
+import ValueType._
+import Type._
 import TMapping.Required
-import Statement.*
-import LiteralType.*
+import Statement._
+import LiteralType._
 import scala.util.Random
 import zio.ZIO.{succeed, mapN, foreach}
 import zio.ZIO
-import zio.interop.catz.*
-import Pattern.*
-
-def failWith(str: String): Eff[Nothing] =
-  ZIO.fail(AppError.AstTransformationError(str))
-
+import zio.interop.catz._
+import Pattern._
+import Utils._
+import Eff._
+import zio._
 object Sexp {
+  def failWith(str: String): Eff[Nothing] =
+    ZIO.fail(AppError.AstTransformationError(str))
+
   def toAstList(exprsList: List[SExp]): Eff[List[Expression]] =
     exprsList.foldMapM(toAst(_).map(List(_)))
 
@@ -197,7 +198,7 @@ object Sexp {
           str.toFloatOption.map(it => TValue(VTFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(succeed(TTypeRef((str))))(succeed(_))
+          .fold[UIO[Type]](succeed(TTypeRef((str))))(succeed(_))
     }
   }
 
@@ -245,7 +246,7 @@ object Sexp {
           str.toFloatOption.map(it => ELiteral(LFloat(it)))
         ).find(_.isDefined)
           .flatten
-          .fold(succeed(EVariable((str))))(succeed(_))
+          .fold[UIO[Expression]](succeed(EVariable((str))))(succeed(_))
     }
   }
 
@@ -429,7 +430,7 @@ object Sexp {
     case SMapLiteral(elements) =>
       foreach(elements)(parseType)
         .flatMap(paired)
-        .map(pairs => TMap(pairs.map(Required.apply.tupled)))
+        .map(pairs => TMap(pairs.map((Required.apply _).tupled)))
   }
 
   def replaceTypeRefsWithTVars(
@@ -464,7 +465,7 @@ object Sexp {
         succeed(
           priorBindings
             .get(name)
-            .fold(TTypeRef(name))(TVariable(_))
+            .fold[Type](TTypeRef(name))(TVariable(_))
         )
       case TMap(mappings) =>
         foreach(mappings) {

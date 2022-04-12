@@ -1,40 +1,57 @@
-import zio.*
+import zio._
 
-enum AppError extends RuntimeException {
-  case TypeNotApplicableToLiteral(_type: Type, literal: Literal)
-  case TypeNotApplicableToExpression(_type: Type, expression: Expression)
-  case ElementNotFound(context: Context, element: ContextElement)
-  case AnnotationNotFound(context: Context, name: String)
-  case TypeNotWellFormed(context: Context, _type: Type)
-  case CannotApplyType(_type: Type)
-  case TypesNotEqual(_typeA: Type, _typeB: Type)
-  case TypeNamesNotEqual(alpha1: String, alpha2: String)
-  case CircularInstantiation(context: Context, name: String, _type: Type)
-  case CannotSubtype(context: Context, a: Type, b: Type)
-  case CannotInstantiateR(context: Context, name: String, _type: Type)
-  case CannotInstantiateL(context: Context, name: String, _type: Type)
-  case ShadowedVariableName(context: Context, name: String)
-  case TypeWithNameAlreadyExists(context: Context, name: String, _type: Type)
-  case TypeNotKnown(context: Context, name: String)
-  case MissingFields(fields: List[String])
-  case TupleSizesDontMatch(a: Type.TTuple, b: Type.TTuple)
-  case Unexpected(label: String)
-  case WrongArity(expected: Int, actual: Int)
-  case PatternDoesntMatch(pattern: Pattern, _type: Type)
-  case InvalidPattern(description: String)
-  case UnknownError(throwable: Throwable)
-  case ParserError(error: cats.parse.Parser.Error)
-  case AstTransformationError(error: String)
+sealed trait AppError extends RuntimeException
+
+object AppError {
+  case class TypeNotApplicableToLiteral(_type: Type, literal: Literal)
+      extends AppError
+  case class TypeNotApplicableToExpression(_type: Type, expression: Expression)
+      extends AppError
+  case class ElementNotFound(context: Context, element: ContextElement)
+      extends AppError
+  case class AnnotationNotFound(context: Context, name: String) extends AppError
+  case class TypeNotWellFormed(context: Context, _type: Type)   extends AppError
+  case class CannotApplyType(_type: Type)                       extends AppError
+  case class TypesNotEqual(_typeA: Type, _typeB: Type)          extends AppError
+  case class TypeNamesNotEqual(alpha1: String, alpha2: String)  extends AppError
+  case class CircularInstantiation(context: Context, name: String, _type: Type)
+      extends AppError
+  case class CannotSubtype(context: Context, a: Type, b: Type) extends AppError
+  case class CannotInstantiateR(context: Context, name: String, _type: Type)
+      extends AppError
+  case class CannotInstantiateL(context: Context, name: String, _type: Type)
+      extends AppError
+  case class ShadowedVariableName(context: Context, name: String)
+      extends AppError
+  case class TypeWithNameAlreadyExists(
+      context: Context,
+      name: String,
+      _type: Type
+  )                                                       extends AppError
+  case class TypeNotKnown(context: Context, name: String) extends AppError
+  case class MissingFields(fields: List[String])          extends AppError
+  case class TupleSizesDontMatch(a: Type.TTuple, b: Type.TTuple)
+      extends AppError
+  case class Unexpected(label: String)                         extends AppError
+  case class WrongArity(expected: Int, actual: Int)            extends AppError
+  case class PatternDoesntMatch(pattern: Pattern, _type: Type) extends AppError
+  case class InvalidPattern(description: String)               extends AppError
+  case class UnknownError(throwable: Throwable)                extends AppError
+  case class ParserError(error: cats.parse.Parser.Error)       extends AppError
+  case class AstTransformationError(error: String)             extends AppError
   // TODO add more info
-  case ModuleCircularDependency()
-  case ModulesNotFound(modules: List[String])
-  case MultipleModuleDefinition(modules: List[String])
-  case AmbiguousModuleReference(
+  case class ModuleCircularDependency()                      extends AppError
+  case class ModulesNotFound(modules: List[String])          extends AppError
+  case class MultipleModuleDefinition(modules: List[String]) extends AppError
+  case class AmbiguousModuleReference(
       references: List[String],
       possibleModules: List[String]
-  )
-  case CompilationError(expression: Expression, error: AppError)
+  ) extends AppError
+  case class CompilationError(expression: Expression, error: AppError)
+      extends AppError
 }
 
-type Env = ZEnv & Has[CompilerState]
-type Eff = [A] =>> ZIO[Env, AppError, A]
+object Eff {
+  type Env    = ZEnv & Has[CompilerState]
+  type Eff[A] = ZIO[Env, AppError, A]
+}

@@ -1,4 +1,4 @@
-import zio.*
+import zio._
 
 case class CompilerState(existentialCounter: Ref[Int]) {
   def makeExistential: UIO[String] = {

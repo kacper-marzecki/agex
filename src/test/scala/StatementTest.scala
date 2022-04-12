@@ -1,18 +1,18 @@
-import zio.*
-import zio.console.*
-import zio.test.*
+import zio._
+import zio.console._
+import zio.test._
 import zio.test.assertM
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Expression.*
-import Type.*
-import LiteralType.*
-import ValueType.*
-import Literal.*
-import ContextElement.*
-import TestCommonExpressions.*
+import zio.test.Assertion._
+import zio.test.environment._
+import Expression._
+import Type._
+import LiteralType._
+import ValueType._
+import Literal._
+import ContextElement._
+import TestCommonExpressions._
 import CommonTestFunctions.{runSynth, toZIO}
-import Statement.*
+import Statement._
 
 object StatementTest extends DefaultRunnableSpec {
   val a = testM("parsesModule") {
@@ -26,7 +26,7 @@ object StatementTest extends DefaultRunnableSpec {
       )
       """
     val x      = Compiler.fileToModule(module)
-    val ass = equalTo(
+    val ass: AssertionM[List[AgexModule]] = equalTo(
       List(
         ModuleDefinition(
           "Kek",

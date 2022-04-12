@@ -1,15 +1,15 @@
-import Expression.*
-import Literal.*
+import Expression._
+import Literal._
 import cats.data.NonEmptyList
-import cats.implicits.*
-import scala.runtime.stdLibPatches.language.experimental.namedTypeArguments
+import cats.implicits._
 import cats.Eval
-import cats.implicits.*
-import ValueType.*
-import Type.*
+import cats.implicits._
+import ValueType._
+import Type._
 import TMapping.Required
-import Statement.*
-
+import Statement._
+import Eff._
+import Utils._
 object Module {
   // TODO these names are awful
 
@@ -58,8 +58,8 @@ object Module {
         ContextElement.CTypedVariable(
           s"${prefixFn(eModule)}${member.name}",
           qualifyLocalRef(eModule.name, member._type),
-          false,
-          member.infix
+          isLocal = false,
+          infix = member.infix
         )
       case member: ElixirTypeDef =>
         ContextElement.CTypeDefinition(

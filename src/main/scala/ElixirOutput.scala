@@ -1,8 +1,8 @@
-import TypedModule.*
-import TypedStatement.*
-import TypedExpression.*
-import TypedPattern.*
-import Literal.*
+import TypedModule._
+import TypedStatement._
+import TypedExpression._
+import TypedPattern._
+import Literal._
 object ElixirOutput {
   def toElixir(it: Literal): String = {
     it match {

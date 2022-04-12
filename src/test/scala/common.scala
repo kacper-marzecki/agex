@@ -1,10 +1,12 @@
-import Expression.*
-import Type.*
-import LiteralType.*
-import Literal.*
-import ContextElement.*
-import zio.*
-
+import Expression._
+import Type._
+import LiteralType._
+import Literal._
+import ContextElement._
+import zio._
+import Eff._
+import Typer._
+import Utils.{pPrint, prettyPrint}
 object TestCommonExpressions {
   val litInt     = ELiteral(LInt(1))
   val litBool    = ELiteral(LBool(false))

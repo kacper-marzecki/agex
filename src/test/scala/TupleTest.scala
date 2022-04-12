@@ -1,17 +1,17 @@
-import zio.*
-import zio.console.*
-import zio.test.*
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Expression.*
-import Type.*
-import LiteralType.*
-import ValueType.*
-import Literal.*
-import ContextElement.*
-import TestCommonExpressions.*
+import zio._
+import zio.console._
+import zio.test._
+import zio.test.Assertion._
+import zio.test.environment._
+import Expression._
+import Type._
+import LiteralType._
+import ValueType._
+import Literal._
+import ContextElement._
+import TestCommonExpressions._
 import CommonTestFunctions.runSynth
-
+import Utils.repeat
 object TupleTest extends DefaultRunnableSpec {
   val aToTupleOfAABool = EAnnotation(
     EFunction(

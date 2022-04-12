@@ -1,29 +1,22 @@
-import zio.*
+import zio._
 import javax.xml.crypto.dsig.Transform
 import cats.effect.concurrent.Supervisor.Token
-import Statement.*
-import cats.implicits.*
-import zio.interop.catz.*
-import Expression.*
-import TypedExpression.*
-import Type.*
+import Statement._
+import cats.implicits._
+import zio.interop.catz._
+import Expression._
+import TypedExpression._
+import Type._
 import scala.annotation.meta.field
-import Pattern.*
+import Pattern._
 import java.nio.file.{Paths, Files, StandardOpenOption}
 import java.nio.charset.StandardCharsets
-import com.softwaremill.quicklens.*
-
-import java.io.*
-
-def writeFile(filename: String, s: String): Eff[Unit] = ZIO {
-  val file = new File(filename)
-  file.getParentFile().mkdirs()
-  val bw = new BufferedWriter(new FileWriter(file))
-  bw.write(s)
-  bw.close()
-
-}.mapError(AppError.UnknownError(_))
-
+import com.softwaremill.quicklens._
+import Context._
+import java.io._
+import Eff._
+import Utils._
+import Typer._
 case class ModuleDependencies(
     module: AgexModule,
     dependencies: List[String]
@@ -31,13 +24,22 @@ case class ModuleDependencies(
 
 object Compiler {
   import java.io.File
+  def writeFile(filename: String, s: String): Eff[Unit] = ZIO {
+    val file = new File(filename)
+    file.getParentFile().mkdirs()
+    val bw = new BufferedWriter(new FileWriter(file))
+    bw.write(s)
+    bw.close()
+
+  }.mapError(AppError.UnknownError(_))
+
   def recursiveListFiles(f: File): Array[File] = {
     val these = f.listFiles
     these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
   }
   def liveCompiler(inputDir: String, outputDir: String) = new Compiler(
     listFiles = ZIO {
-      recursiveListFiles(File(inputDir))
+      recursiveListFiles(new File(inputDir))
         .filterNot(_.isDirectory)
         .map(_.getAbsolutePath)
         .toList
@@ -88,10 +90,12 @@ object Compiler {
 
 class Compiler(
     listFiles: Eff[List[String]],
-    getFile: (path: String) => Eff[String],
-    writeFile: (fileName: String, fileContent: String) => Eff[Unit]
+    // name
+    getFile: String => Eff[String],
+    // name, content
+    writeFile: (String, String) => Eff[Unit]
 ) {
-  import Compiler.*
+  import Compiler._
   val loadAgexCoreFiles = ZIO {
     val coreFiles = List("Kernel.agex")
     coreFiles.map { it =>

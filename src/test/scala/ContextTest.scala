@@ -1,11 +1,11 @@
-import zio.*
-import zio.console.*
-import zio.test.*
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Type.*
-import LiteralType.*
-import ContextElement.*
+import zio._
+import zio.console._
+import zio.test._
+import zio.test.Assertion._
+import zio.test.environment._
+import Type._
+import LiteralType._
+import ContextElement._
 
 object ContextTest extends DefaultRunnableSpec {
   val solved1 = CSolved("solved1", TLiteral(LTChar))

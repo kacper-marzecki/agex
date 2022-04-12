@@ -1,13 +1,13 @@
-import zio.test.*
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Type.*
-import LiteralType.*
-import ContextElement.*
+import zio.test._
+import zio.test.Assertion._
+import zio.test.environment._
+import Type._
+import LiteralType._
+import ContextElement._
 import cats.data.NonEmptyList
 
 object TokenizerTest extends DefaultRunnableSpec {
-  def eq(it: SExp) = equalTo(Right(it))
+  def eq(it: SExp): Assertion[Either[Any, SExp]] = equalTo(Right(it))
 
   def spec = suite("TokenizerTest")(
     test("string test") {

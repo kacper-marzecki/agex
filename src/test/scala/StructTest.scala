@@ -1,18 +1,20 @@
-import zio.*
-import zio.console.*
-import zio.test.*
+import zio._
+import zio.console._
+import zio.test._
 import zio.test.assertM
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Expression.*
-import Type.*
-import ValueType.*
-import LiteralType.*
-import Literal.*
-import ContextElement.*
-import TestCommonExpressions.*
-import CommonTestFunctions.*
-
+import zio.test.Assertion._
+import zio.test.environment._
+import Expression._
+import Type._
+import ValueType._
+import LiteralType._
+import Literal._
+import ContextElement._
+import TestCommonExpressions._
+import CommonTestFunctions._
+import Eff._
+import Typer._
+import Utils.{pPrint, prettyPrint}
 object StructTest extends DefaultRunnableSpec {
 
   def spec = suite("StructTest")(

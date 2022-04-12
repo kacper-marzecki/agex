@@ -1,4 +1,5 @@
-val scala3Version = "3.1.0"
+val scala3Version = "2.13.8"
+addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
 lazy val root = project
   .in(file("."))
@@ -17,6 +18,5 @@ lazy val root = project
       "dev.zio"                    %% "zio-test"         % "1.0.9" % "test",
       "dev.zio"                    %% "zio-test-sbt"     % "1.0.9" % "test"
     ),
-    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
-    scalacOptions ++= Seq("-source:future")
+    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
   )

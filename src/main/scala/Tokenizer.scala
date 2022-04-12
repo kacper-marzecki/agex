@@ -1,6 +1,6 @@
-import Expression.*
-import Literal.*
-import cats.parse.{Parser0 as P0, Parser as P, Numbers}
+import Expression._
+import Literal._
+import cats.parse.{Parser0 => P0, Parser => P, Numbers}
 import cats.data.NonEmptyList
 
 // TODO add file location by using P.index

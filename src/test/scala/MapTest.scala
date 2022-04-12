@@ -1,16 +1,16 @@
-import zio.*
-import zio.console.*
-import zio.test.*
+import zio._
+import zio.console._
+import zio.test._
 import zio.test.assertM
-import zio.test.Assertion.*
-import zio.test.environment.*
-import Expression.*
-import Type.*
-import LiteralType.*
-import ValueType.*
-import Literal.*
-import ContextElement.*
-import TestCommonExpressions.*
+import zio.test.Assertion._
+import zio.test.environment._
+import Expression._
+import Type._
+import LiteralType._
+import ValueType._
+import Literal._
+import ContextElement._
+import TestCommonExpressions._
 import TMapping.Required
 import CommonTestFunctions.{runSynth, parseAndSynth}
 
@@ -30,14 +30,14 @@ object MapTest extends DefaultRunnableSpec {
                 List(
                   (ELiteral(LInt(1)), ELiteral(LString("1"))),
                   (ELiteral(LInt(2)), ELiteral(LString("2"))),
-                  (ELiteral(LInt(3)), ELiteral(LFloat(3.2)))
+                  (ELiteral(LInt(3)), ELiteral(LFloat(3.2f)))
                 )
               ),
               TMap(
                 List(
                   Required(TValue(VTInt(1)), TValue(VTString("1"))),
                   Required(TValue(VTInt(2)), TValue(VTString("2"))),
-                  Required(TValue(VTInt(3)), TValue(VTFloat(3.2)))
+                  Required(TValue(VTInt(3)), TValue(VTFloat(3.2f)))
                 )
               )
             )

@@ -1,17 +1,17 @@
-import cats.implicits.*
-import zio.*
+import cats.implicits._
+import zio._
 import ZIO.{fail, succeed}
-import AppError.*
-import ContextElement.*
-import Type.*
-import TMapping.*
+import AppError._
+import ContextElement._
+import Type._
+import TMapping._
 import cats.syntax.apply
 import scala.jdk.FunctionWrappers.RichToLongFunctionAsFunction1
-
-type AddError  = ShadowedVariableName | TypeWithNameAlreadyExists
-type AddResult = IO[AddError, Context]
+import Utils._
+import Eff._
 
 case class Context(elements: Vector[ContextElement] = Vector.empty) {
+  import Context._
   lazy val typedVariableNames = elements.mapFilter { it =>
     it match {
       case _: CTypedVariable => Some(it.name)
@@ -39,7 +39,7 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
   def addAll(newElements: ContextElement*): AddResult =
     addAll(newElements)
 
-  private def validateCanAdd(element: ContextElement): IO[AddError, Unit] =
+  private def validateCanAdd(element: ContextElement): IO[AppError, Unit] =
     element match {
       case _: CTypedVariable =>
         if (typedVariableNames.contains(element.name))
@@ -103,7 +103,7 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
         case _                                              => None
       }
       .headOption
-      .fold(fail(TypeNotKnown(this, name)))(succeed(_))
+      .fold[IO[AppError, Type]](fail(TypeNotKnown(this, name)))(succeed(_))
 
   def hasExistential(name: String): Boolean =
     elements.contains(CExistential(name))
@@ -125,119 +125,125 @@ case class Context(elements: Vector[ContextElement] = Vector.empty) {
     }.headOption
 }
 
+object Context {
+  // type AddError  = ShadowedVariableName | TypeWithNameAlreadyExists
+  type AddResult = IO[AppError, Context]
 /// Fig 7
-def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
-  _type match {
-    case _: TLiteral      => ZIO.unit
-    case _: TValue        => ZIO.unit
-    case TAny             => ZIO.unit
-    case TNothing         => ZIO.unit
-    case TList(valueType) => checkIsWellFormed(context, valueType)
-    case TVariable(name) =>
-      if (context.hasVariable(name)) ZIO.unit
-      else
-        fail(TypeNotWellFormed(context, _type))
-    case TFunction(args, ret) =>
-      ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
-    case TQuantification(alpha, a) =>
-      context
-        .add(CVariable(alpha))
-        .flatMap(checkIsWellFormed(_, a))
-    case it: TMulQuantification =>
-      context
-        .addAll(it.names.map(CVariable(_)))
-        .flatMap(checkIsWellFormed(_, it._type))
-    case TExistential(name) =>
-      if (context.hasExistential(name) || context.getSolved(name).isDefined) {
-        ZIO.unit
-      } else {
-        fail(TypeNotWellFormed(context, _type))
-      }
-    case TTuple(valueTypes) =>
-      ZIO.foreach_(valueTypes)(checkIsWellFormed(context, _))
-    case TTypeRef(targetType) =>
-      if (context.hasTypeDefinition(targetType)) {
-        ZIO.unit
-      } else {
-        fail(TypeNotKnown(context, targetType))
-      }
-    case TSum(xs) => ZIO.foreach_(xs)(checkIsWellFormed(context, _))
-    case it @ TTypeApp(_type, args) =>
-      ZIO.foreach_(_type :: args)(
-        checkIsWellFormed(context, _)
-      ) *> it
-        .applyType(context)
-        .unit
-    case TStruct(fieldTypes) =>
-      ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
-    case TMap(mappings) =>
-      ZIO.foreach_(mappings.flatMap(it => List(it.k, it.v)))(
-        checkIsWellFormed(context, _)
-      )
+  def checkIsWellFormed(context: Context, _type: Type): IO[AppError, Unit] = {
+    _type match {
+      case _: TLiteral      => ZIO.unit
+      case _: TValue        => ZIO.unit
+      case TAny             => ZIO.unit
+      case TNothing         => ZIO.unit
+      case TList(valueType) => checkIsWellFormed(context, valueType)
+      case TVariable(name) =>
+        if (context.hasVariable(name)) ZIO.unit
+        else
+          fail(TypeNotWellFormed(context, _type))
+      case TFunction(args, ret) =>
+        ZIO.foreach_(ret :: args)(checkIsWellFormed(context, _))
+      case TQuantification(alpha, a) =>
+        context
+          .add(CVariable(alpha))
+          .flatMap(checkIsWellFormed(_, a))
+      case it: TMulQuantification =>
+        context
+          .addAll(it.names.map(CVariable(_)))
+          .flatMap(checkIsWellFormed(_, it._type))
+      case TExistential(name) =>
+        if (context.hasExistential(name) || context.getSolved(name).isDefined) {
+          ZIO.unit
+        } else {
+          fail(TypeNotWellFormed(context, _type))
+        }
+      case TTuple(valueTypes) =>
+        ZIO.foreach_(valueTypes)(checkIsWellFormed(context, _))
+      case TTypeRef(targetType) =>
+        if (context.hasTypeDefinition(targetType)) {
+          ZIO.unit
+        } else {
+          fail(TypeNotKnown(context, targetType))
+        }
+      case TSum(xs) => ZIO.foreach_(xs)(checkIsWellFormed(context, _))
+      case it @ TTypeApp(_type, args) =>
+        ZIO.foreach_(_type :: args)(
+          checkIsWellFormed(context, _)
+        ) *> it
+          .applyType(context)
+          .unit
+      case TStruct(fieldTypes) =>
+        ZIO.foreach_(fieldTypes.values)(checkIsWellFormed(context, _))
+      case TMap(mappings) =>
+        ZIO.foreach_(mappings.flatMap(it => List(it.k, it.v)))(
+          checkIsWellFormed(context, _)
+        )
+    }
   }
-}
 
 // Fig 8
-def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
-  _type match {
-    case TValue(_)        => succeed(_type)
-    case TLiteral(_)      => succeed(_type)
-    case TVariable(_)     => succeed(_type)
-    case TAny             => succeed(_type)
-    case TNothing         => succeed(_type)
-    case TList(valueType) => applyContext(valueType, context).map(TList(_))
-    case TExistential(name) => {
-      context.getSolved(name).fold(succeed(_type))(applyContext(_, context))
-    }
-    case TFunction(argTypes, returnType) =>
-      for {
-        args <- ZIO.foreach(argTypes)(applyContext(_, context))
-        body <- applyContext(returnType, context)
-      } yield TFunction(args, body)
-    case TQuantification(name, quantType) => {
-      applyContext(quantType, context).map(TQuantification(name, _))
-    }
-    case TMulQuantification(names, quantType) =>
-      // 1:1 TQuantification port
-      applyContext(quantType, context).map(TMulQuantification(names, _))
-    case TSum(xs) =>
-      ZIO
-        .foreach(xs)(applyContext(_, context))
-        .map(TSum.create(_))
-    case TTypeApp(quant, args) =>
-      for {
-        q <- applyContext(quant, context)
-        a <- ZIO.foreach(args)(applyContext(_, context))
-      } yield (TTypeApp(q, a))
-    case TTuple(valueTypes) =>
-      ZIO.foreach(valueTypes)(applyContext(_, context)).map(TTuple(_))
-    case TTypeRef(name) =>
-      context
-        .getTypeDefinition(name)
-        .flatMap(applyContext(_, context))
-    case TStruct(fieldTypes) =>
-      ZIO
-        .foreach(fieldTypes) { case (k, v) =>
-          applyContext(v, context).map((k, _))
-        }
-        .map(TStruct.apply)
-    case TMap(mappings) =>
-      ZIO
-        .foreach(mappings) { it =>
-          it match {
-            case Required(k, v) =>
-              for {
-                appliedK <- applyContext(k, context)
-                appliedV <- applyContext(v, context)
-              } yield Required(appliedK, appliedV)
-            case Optional(k, v) =>
-              for {
-                appliedK <- applyContext(k, context)
-                appliedV <- applyContext(v, context)
-              } yield Optional(appliedK, appliedV)
+  def applyContext(_type: Type, context: Context): IO[AppError, Type] = {
+    _type match {
+      case TValue(_)        => succeed(_type)
+      case TLiteral(_)      => succeed(_type)
+      case TVariable(_)     => succeed(_type)
+      case TAny             => succeed(_type)
+      case TNothing         => succeed(_type)
+      case TList(valueType) => applyContext(valueType, context).map(TList(_))
+      case TExistential(name) => {
+        context
+          .getSolved(name)
+          .fold[IO[AppError, Type]](succeed(_type))(applyContext(_, context))
+      }
+      case TFunction(argTypes, returnType) =>
+        for {
+          args <- ZIO.foreach(argTypes)(applyContext(_, context))
+          body <- applyContext(returnType, context)
+        } yield TFunction(args, body)
+      case TQuantification(name, quantType) => {
+        applyContext(quantType, context).map(TQuantification(name, _))
+      }
+      case TMulQuantification(names, quantType) =>
+        // 1:1 TQuantification port
+        applyContext(quantType, context).map(TMulQuantification(names, _))
+      case TSum(xs) =>
+        ZIO
+          .foreach(xs)(applyContext(_, context))
+          .map(TSum.create(_))
+      case TTypeApp(quant, args) =>
+        for {
+          q <- applyContext(quant, context)
+          a <- ZIO.foreach(args)(applyContext(_, context))
+        } yield (TTypeApp(q, a))
+      case TTuple(valueTypes) =>
+        ZIO.foreach(valueTypes)(applyContext(_, context)).map(TTuple(_))
+      case TTypeRef(name) =>
+        context
+          .getTypeDefinition(name)
+          .flatMap(applyContext(_, context))
+      case TStruct(fieldTypes) =>
+        ZIO
+          .foreach(fieldTypes) { case (k, v) =>
+            applyContext(v, context).map((k, _))
           }
+          .map(TStruct.apply)
+      case TMap(mappings) =>
+        ZIO
+          .foreach(mappings) { it =>
+            it match {
+              case Required(k, v) =>
+                for {
+                  appliedK <- applyContext(k, context)
+                  appliedV <- applyContext(v, context)
+                } yield Required(appliedK, appliedV)
+              case Optional(k, v) =>
+                for {
+                  appliedK <- applyContext(k, context)
+                  appliedV <- applyContext(v, context)
+                } yield Optional(appliedK, appliedV)
+            }
 
-        }
-        .map(TMap(_))
+          }
+          .map(TMap(_))
+    }
   }
 }

@@ -2,7 +2,10 @@ import Type.TAny
 import scala.collection.concurrent.TNode
 import TMapping.Optional
 import TMapping.Required
+import Context._
+
 sealed trait Literal
+
 object Literal {
   case class LChar(it: Char)     extends Literal
   case class LString(it: String) extends Literal
@@ -107,12 +110,12 @@ object Pattern {
   case class PMap(kvs: List[(Pattern, Pattern)])  extends Pattern
 }
 
-sealed trait ValueType(val literalType: Type.TLiteral)
+sealed abstract class ValueType(val literalType: Type.TLiteral)
 object ValueType {
   // TODO: do we need a unit and nil value types ?
   // TODO: tuple, struct value types - do they make sense
-  import Type.*
-  import LiteralType.*
+  import Type._
+  import LiteralType._
   case class VTAtom(it: String)   extends ValueType(TLiteral(LTAtom))
   case class VTChar(it: Char)     extends ValueType(TLiteral(LTChar))
   case class VTFloat(it: Float)   extends ValueType(TLiteral(LTFloat))
